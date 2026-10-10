@@ -1,6 +1,6 @@
 # Xe RICH demonstrator: summary of the options explored
 
-This summarises the design exploration for a lab demonstrator of pressurised xenon as the ARC gas radiator. The study drivers in `studies/` produce every number quoted here, and the plots are in `figures/`. Assumptions and simplifications are listed in the [README](../README.md).
+This summarises the design exploration for a lab demonstrator of pressurised xenon as the ARC gas radiator. The study drivers in `studies/` produce every number quoted here, and the plots are on the [design-figures page](https://mdefranc.web.cern.ch/ARC/xe_demonstrator/design_figures/). Assumptions and simplifications are listed in the [README](../README.md).
 
 **Status in one paragraph.** Phase 1 is gas-only ring imaging with cosmic muons. It uses a stock 3" spherical mirror with f ≈ 203 mm, a 2" × 2" SiPM plane at its focus and ~20 cm of Xe at 2–3 bar. The aerogel cannot be imaged in this geometry. It moves to a separate proximity-focusing configuration (phase 2), which also measures how Xe in the pores shifts the aerogel index. A full-size, ARC-like cell needs a custom mirror and is left for later.
 
