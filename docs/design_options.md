@@ -1,6 +1,6 @@
 # Xe RICH demonstrator: summary of the options explored
 
-This summarises the design exploration of 8–10 October 2026 for a lab demonstrator of pressurised xenon as the ARC gas radiator. The study drivers in `studies/` produce every number quoted here, and the plots are in `figures/`. Assumptions and simplifications are listed in the [README](../README.md).
+This summarises the design exploration for a lab demonstrator of pressurised xenon as the ARC gas radiator. The study drivers in `studies/` produce every number quoted here, and the plots are in `figures/`. Assumptions and simplifications are listed in the [README](../README.md).
 
 **Status in one paragraph.** Phase 1 is gas-only ring imaging with cosmic muons. It uses a stock 3" spherical mirror with f ≈ 203 mm, a 2" × 2" SiPM plane at its focus and ~20 cm of Xe at 2–3 bar. The aerogel cannot be imaged in this geometry. It moves to a separate proximity-focusing configuration (phase 2), which also measures how Xe in the pores shifts the aerogel index. A full-size, ARC-like cell needs a custom mirror and is left for later.
 
@@ -15,20 +15,20 @@ This summarises the design exploration of 8–10 October 2026 for a lab demonstr
 - About 53 % of the photons emitted in 200–600 nm lie below 300 nm.
 
 ### 1.2 Xe optical constants (`xerich.media`)
-These use the Bideau-Mehu (1981) Sellmeier formula, scaled with Lorentz–Lorenz plus a virial correction. Xe is ~1.6 % non-ideal at 3 bar. All values are at 20 °C.
+These use the Börzsönyi et al. (2008) Sellmeier formula (273 K, taken as 273.15 K, and 1000 mbar; fitted to an 800 nm measurement and literature UV–visible indices), scaled with Lorentz–Lorenz and the virial molar density. Xe is ~1.6 % non-ideal at 3 bar; the code's density agrees with NIST to 0.03 % at 1–3 bar and 20 °C (NIST effective B = −133 cm³/mol at 293 K vs the −130 used). All values are at 20 °C (`scripts/investigations/xe_index/doc_values.py`). The Bideau-Mehu (1981) formula gives an (n−1) lower by 0.7 % at 264 nm, 1.7 % at 400 nm and 2.2 % at 954 nm, a θc 0.9 % lower at 400 nm, and a chromatic rms 9–12 % larger. Against Koch's measurements (as tabulated by Leonard, 1974; 273.16 K, 1 atm, air wavelengths converted to vacuum), the Börzsönyi (n−1) agrees to ≤ 0.08 % above 290 nm and is lower by 0.13 % at 264 nm and 0.46 % at 230 nm; at 264 nm and 3 bar this is 0.04 mrad in θc.
 
 | | 2 bar | 3 bar |
 |---|---|---|
-| (n−1) at 300 nm | 1.41 × 10⁻³ | 2.12 × 10⁻³ |
-| θc (β = 1) at 400 nm | 51.4 mrad | 63.2 mrad |
-| π / K / p threshold (300 nm) | 2.6 / 9.3 / 17.7 GeV | 2.1 / 7.6 / 14.4 GeV |
-| N_γ/cm saturated, 200–600 nm | 4.4 | 6.6 |
+| (n−1) at 300 nm | 1.42 × 10⁻³ | 2.15 × 10⁻³ |
+| θc (β = 1) at 400 nm | 51.9 mrad | 63.7 mrad |
+| π / K / p threshold (300 nm) | 2.6 / 9.2 / 17.6 GeV | 2.1 / 7.5 / 14.3 GeV |
+| N_γ/cm saturated, 200–600 nm | 4.4 | 6.7 |
 | N_γ/cm saturated, 320–450 nm | 1.1 | 1.7 |
 
 - 2 bar Xe is similar to C₄F₁₀ in index. 3 bar gives about 50 % more photons and lowers the K threshold.
 - π/K angle separation at 300 nm, for 2 bar vs 3 bar:
   - 20 GeV: 5.6 vs 4.5 mrad.
-  - 45 GeV: 1.1 vs 0.9 mrad.
+  - 45 GeV: 1.0 vs 0.9 mrad.
   - The separation shrinks slightly with pressure at high p, because it scales as Δm²/(2p² tanθc).
 
 ### 1.3 Choice of wavelength band
@@ -36,10 +36,10 @@ Emitted yield and chromatic rms per photon, for β ≈ 1:
 
 | Band | N/cm (2 / 3 bar) | Chromatic rms per photon (2 / 3 bar) | σ/√N per cm, 3 bar |
 |---|---|---|---|
-| 320–450 nm | 1.1 / 1.7 | 0.44 / 0.54 mrad | ~0.42 mrad |
-| 300–600 nm | 2.0 / 3.0 | 0.76 / 0.93 mrad | ~0.53 mrad |
-| 250–600 nm | 2.9 / 4.4 | 1.3 / 1.6 mrad | — |
-| 200–600 nm | 4.4 / 6.6 | 2.5 / 3.1 mrad | ~1.2 mrad |
+| 320–450 nm | 1.1 / 1.7 | 0.41 / 0.50 mrad | ~0.38 mrad |
+| 300–600 nm | 2.1 / 3.1 | 0.70 / 0.86 mrad | ~0.49 mrad |
+| 250–600 nm | 3.0 / 4.5 | 1.2 / 1.4 mrad | — |
+| 200–600 nm | 4.4 / 6.7 | 2.2 / 2.7 mrad | ~1.1 mrad |
 
 - The 320–450 nm band gives the best chromatic term per track but keeps only ~25 % of the 200–600 nm photons.
 - In practice the SiPM PDE sets the band. 320–450 nm roughly matches standard SiPMs.
@@ -157,10 +157,10 @@ Assumptions:
 
 | Mirror | SiPM | ≥ 80 % rings/h (3 bar) | Full rings/h (3 bar) | ≥ 80 % rings/h (2 bar) |
 |---|---|---|---|---|
-| 2" | 5.1 cm | 4.7 | 1.8 | 7.3 |
+| 2" | 5.1 cm | 4.6 | 1.8 | 7.3 |
 | **3"** | **5.1 cm** | **13** | **6** | **18** |
 | 3" | 4 cm | 5 | 2.5 | 7 |
-| 3" | 8 cm | 48 | 24 | 59 |
+| 3" | 8 cm | 47 | 23 | 58 |
 
 - **The SiPM limits the angular acceptance.** Full rings need |θ_μ| ≲ 3–4° for a 5 cm sensor.
 - **The mirror limits the position acceptance:** about ±2 cm for a 3" mirror.
@@ -183,9 +183,9 @@ Scan with muons uniform over the 5 × 5 cm tile (~985 /h):
 | SiPM | Mirror Ø | Aerogel arcs ≥ 50 % /h | Full aerogel rings /h | Gas rings (≥ 80 %) /h |
 |---|---|---|---|---|
 | 5.1 cm | 76 mm | 0 | 0 | 9 |
-| 8 cm | 152 mm | 0 | 0 | 54 |
-| 10.2 cm | 152 mm | 22 | 0 | 91 |
-| 12.8 cm | 152 mm | 62 | 5 | 135 |
+| 8 cm | 152 mm | 0 | 0 | 53 |
+| 10.2 cm | 152 mm | 22 | 0 | 90 |
+| 12.8 cm | 152 mm | 62 | 5 | 134 |
 | 12.8 cm | 200 mm | 104 | 12 | 158 |
 
 - Imaging the aerogel needs **both** a SiPM of ≥ 10 cm (≥ 16 matrices, ≥ 1024 channels at 3 mm) **and** a mirror of ≥ 15 cm at f ≈ 20 cm (custom).
@@ -205,15 +205,15 @@ The aerogel threshold for muons is ~0.43 GeV, so nearly every triggered muon rad
 
 ### 6.3 Aerogel index with Xe in the pores
 - Expected shift: Δn ≈ porosity × (n_Xe − n_air), with a porosity of ≈ 0.935 for n = 1.03 (ρ ≈ 0.14 g/cm³). At 400 nm:
-  - 2 bar: **+0.0010**, Δθc ≈ +3.8 mrad;
+  - 2 bar: **+0.0010**, Δθc ≈ +3.9 mrad;
   - 3 bar: **+0.0016**, Δθc ≈ +6.3 mrad.
   
-  These are relative to the in-air specification; relative to vacuum the shifts are +0.0012 and +0.0019.
+  These are relative to the in-air specification; relative to vacuum the shifts are +0.0013 and +0.0019.
 - This is a **lower bound**: Xe adsorbed on the large internal surface (500–1000 m²/g) could add to it. Pore filling may also cause a transient of minutes to hours.
 - No published measurement in pressurised Xe was found.
 - **Precedent:** the LHCb RICH1 aerogel in contact with C₄F₁₀ had ~1.8× worse Cherenkov-angle resolution than simulated, attributed at least partly to absorbed C₄F₁₀. The aerogel was isolated from the gas for 2012 running (arXiv:1211.6759). This is relevant to ARC, where the aerogel sits in the gas.
 - Proposed measurement: the aerogel θc in vacuum, air, and Xe at 1/2/3 bar, plus its time dependence after each pressure change.
-- In the gas-imaging configuration, 1 cm of aerogel in front of the SiPM would scatter away roughly 25–40 % of the gas photons at 350–400 nm. That is a rough estimate depending on the tile clarity, and it is one reason phase 1 runs without aerogel.
+- In the gas-imaging configuration, 1 cm of aerogel in front of the SiPM Rayleigh-scatters 28 % of the gas photons at 350 nm and 18 % at 400 nm, 21 % of the FT×QE photons over the SiPM band, for the clarity of the ARC simulation (C = 0.005 µm⁴/cm; `doc_values.py`, `hitmap_onaxis.py`). That depends on the tile clarity, and it is one reason phase 1 runs without aerogel.
 
 ---
 
@@ -233,11 +233,15 @@ The aerogel threshold for muons is ~0.43 GeV, so nearly every triggered muon rad
 - SiPM pixel size and part number. This drives the resolution and acceptance numbers.
 - Phase-2 mechanical design: gap, tile holder, trigger.
 - Fold in the measured mirror reflectivity, SiPM PDE and aerogel transmission. Add photon statistics to the toys.
-- Check the Xe virial coefficient and the dispersion against more recent data.
+- Xe virial coefficient and UV dispersion: checked (§1.2).
 - Compare against the ARC full simulation (`ARC_Simulation_Reconstruction`), with Xe properties tuned.
 
 ## Sources
-- Xe dispersion: [refractiveindex.info, Bideau-Mehu et al. 1981](https://refractiveindex.info/?shelf=main&book=Xe&page=Bideau-Mehu)
+- Xe dispersion:
+  - [Börzsönyi et al., Appl. Opt. 47, 4856 (2008)](https://doi.org/10.1364/AO.47.004856); coefficients as on [refractiveindex.info, Börzsönyi](https://refractiveindex.info/?shelf=main&book=Xe&page=Borzsonyi), which corrects a typo of the paper (C₁ = 12.75 × 10⁻³ µm²)
+  - [refractiveindex.info, Bideau-Mehu et al. 1981](https://refractiveindex.info/?shelf=main&book=Xe&page=Bideau-Mehu)
+  - [Leonard, At. Data Nucl. Data Tables 14, 21 (1974)](https://doi.org/10.1016/S0092-640X%2874%2980028-8), Table II(e): Koch's data (Kgl. Fysiogr. Sällsk. Lund Förh. 19, 173 (1949)) at 273.16 K and 1 atm, wavelengths in air
+- Xe density: [NIST Chemistry WebBook, fluid properties of xenon](https://webbook.nist.gov/cgi/fluid.cgi?ID=C7440633&Action=Page)
 - Mirrors:
   - [Edmund #43-584](https://www.edmundoptics.com/p/3quot-dia-8quot-fl-uv-enhanced-alum-spherical-mirror/5147/)
   - [Edmund #49-608](https://www.edmundoptics.com/p/2quot-dia-8quot-fl-uv-enhanced-alum-spherical-mirror/10121/)

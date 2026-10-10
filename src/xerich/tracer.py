@@ -6,8 +6,9 @@ vector E transverse to the direction.
 
 - Geometry: cones, refraction, reflection, sphere and plane intersections, boxes.
 - Fresnel: s/p amplitude and power coefficients, field splitting at a plane interface.
-- trace: weight-splitting tracer through a Scene (ambient medium, Fresnel slabs,
-  spherical mirror, sensor plane).
+- Rayleigh: isotropic directions, polarised electric-dipole scattering.
+- trace: weight-splitting tracer through a Scene (ambient medium, Fresnel slabs with
+  optional Rayleigh scattering, spherical mirror, sensor plane).
 """
 from dataclasses import dataclass
 
@@ -169,6 +170,35 @@ def _unit(E):
     return E/np.where(a > 0, a, 1)
 
 
+# Rayleigh scattering
+
+def isotropic(rng, n):
+    """n unit vectors uniform on the sphere, shape (n,3)."""
+    z = 2*rng.random(n)-1; phi = 2*np.pi*rng.random(n); s = np.sqrt(1-z*z)
+    return np.stack([s*np.cos(phi), s*np.sin(phi), z], -1)
+
+
+def rayleigh_scatter(rng, d, E=None):
+    """New directions and unit fields after electric-dipole (Rayleigh) scattering of rays d (M,3) with unit fields E.
+
+    Polarised: dP/dOmega ~ |E|^2 - |k.E|^2 and new field E - (k.E) k, normalised (Jackson, Classical
+    Electrodynamics, 3rd ed., sec. 10.1). E = None: unpolarised, dP/dOmega ~ 1 + cos^2 of the angle to d.
+    Directions are drawn isotropically and accepted with that probability (maximum 1).
+    """
+    k = np.empty_like(d); todo = np.arange(len(d))
+    while len(todo):
+        q = isotropic(rng, len(todo))
+        if E is None:
+            prob = 0.5*(1+(q*d[todo]).sum(-1)**2)
+        else:
+            prob = 1-np.abs((q*E[todo]).sum(-1))**2
+        a = rng.random(len(todo)) < prob
+        k[todo[a]] = q[a]; todo = todo[~a]
+    if E is None:
+        return k, None
+    return k, _unit(E-(k*E).sum(-1, keepdims=True)*k)
+
+
 # Axis-aligned boxes
 
 def box_exit(p, d, lo, hi):
@@ -201,10 +231,16 @@ def box_entry(p, d, lo, hi, eps=1e-7):
 
 @dataclass(frozen=True)
 class Slab:
-    """Box [lo, hi] (mm) of a medium: Fresnel interfaces on its z faces, absorbing side faces."""
+    """Box [lo, hi] (mm) of a medium: Fresnel interfaces on its z faces, absorbing side faces.
+
+    scatter (media.Rayleigh or None): Rayleigh scattering inside, with mean free path scatter.length(lam)
+    [mm], and the factor scatter.face_transmission on every transmission through a z face.
+    A z face lying on the sensor plane absorbs like the sensor.
+    """
     lo: tuple
     hi: tuple
     medium: object
+    scatter: object = None
 
 
 @dataclass(frozen=True)
@@ -234,18 +270,21 @@ class Scene:
     sensor: SensorPlane
 
 
-REASONS = ('detected', 'mirror aperture', 'tile sides', 'outside sensor', 'interaction cap', 'escaped')
-CLASSES = ('direct', 'bottom', 'top', 'TIR', 'multiple')
-_EV_NONE, _EV_SENSOR, _EV_MIRROR, _EV_EXIT, _EV_ENTRY = -1, 0, 1, 2, 3
+REASONS = ('detected', 'mirror aperture', 'tile sides', 'outside sensor', 'interaction cap', 'escaped', 'surface loss')
+CLASSES = ('direct', 'bottom', 'top', 'TIR', 'multiple', 'scattered')
+_EV_NONE, _EV_SENSOR, _EV_MIRROR, _EV_EXIT, _EV_ENTRY, _EV_SCATTER = -1, 0, 1, 2, 3, 4
 
 
-def path_class(nb, nt, ntir):
-    """Path class index into CLASSES from the counts of partial reflections on bottom and top faces and of TIRs."""
+def path_class(nb, nt, ntir, nsc=None):
+    """Path class index into CLASSES from the counts of partial reflections on bottom and top faces, of TIRs and of
+    Rayleigh scatters (nsc; any scatter makes the path 'scattered')."""
     c = np.full(np.shape(nb), 4, np.int8)
     c[(nb == 0)&(nt == 0)&(ntir == 0)] = 0
     c[(nb == 1)&(nt == 0)&(ntir == 0)] = 1
     c[(nb == 0)&(nt == 1)&(ntir == 0)] = 2
     c[(nb == 0)&(nt == 0)&(ntir > 0)] = 3
+    if nsc is not None:
+        c[nsc > 0] = 5
     return c
 
 
@@ -275,7 +314,7 @@ def _region_at(scene, q):
     return reg
 
 
-def trace(scene, p, d, lam, region, E=None, max_reflections=2, max_interactions=64, eps=1e-7):
+def trace(scene, p, d, lam, region, E=None, max_reflections=2, max_interactions=64, eps=1e-7, rng=None, record=False):
     """Trace photons through the scene, splitting the weight at every Fresnel interface.
 
     p, d (M,3) start points and unit directions, lam (M,) wavelengths [nm], region (M,) start
@@ -286,23 +325,40 @@ def trace(scene, p, d, lam, region, E=None, max_reflections=2, max_interactions=
     slab side face, or when nothing lies ahead (escaped). The interaction cap drops a reflected
     branch that would exceed max_reflections partial reflections, and stops a branch that would
     exceed max_interactions surface interactions (mirror reflections, slab-face crossings and
-    reflections). Returns a dict of terminal branches: photon index i, reason (index into REASONS),
-    weight w (initial weight 1), end point p, direction d, path class cls (index into CLASSES) and
-    interaction count nint.
+    reflections, Rayleigh scatters). In a slab with a scatter model a branch scatters after an
+    exponential free path (drawn from rng) into a new direction (rayleigh_scatter); the weight is
+    unchanged and the path becomes class 'scattered'. A factor A < 1 removes (1 - sqrt(A)) of the
+    transmitted weight at each face crossing (reason 'surface loss'). Returns a dict of terminal
+    branches: photon index i, reason (index into REASONS), weight w (initial weight 1), end point p,
+    direction d, path class cls (index into CLASSES), interaction count nint and Rayleigh-scatter
+    count nsc; with record=True also path, a list of the (K,3) vertices of each branch from its
+    start point to its end point (vertices of branches that escape end at the last interaction).
     """
     M = len(p); zi = np.zeros(M, np.int16)
     st = dict(i=np.arange(M), p=np.asarray(p, float), d=np.asarray(d, float), lam=np.asarray(lam, float),
               reg=np.asarray(region, np.int16), w=np.ones(M), nint=zi, nb=zi.copy(), nt=zi.copy(), ntir=zi.copy(),
-              E=None if E is None else np.asarray(E, complex))
+              nsc=zi.copy(), E=None if E is None else np.asarray(E, complex))
     ends = []
     sen = scene.sensor; mir = scene.mirror
+    scat = [j for j, sl in enumerate(scene.slabs) if sl.scatter is not None]
+    if scat and rng is None:
+        raise ValueError('Rayleigh scattering needs a random generator rng')
+    face_t = np.array([sl.scatter.face_transmission if sl.scatter is not None else 1.0 for sl in scene.slabs]+[1.0])
+    touch = any(abs(sl.hi[2]-sen.z) < 1e-9 for sl in scene.slabs)
+    step = 0
+    if record:
+        st['bid'] = np.arange(M); rec = [(st['bid'], 0, st['p'])]; parent = [-1]*M; split = [0]*M
 
     def finish(sub, reason):
         if len(sub['i']):
-            ends.append(dict(i=sub['i'], reason=np.full(len(sub['i']), reason, np.int8), w=sub['w'], p=sub['p'],
-                             d=sub['d'], cls=path_class(sub['nb'], sub['nt'], sub['ntir']), nint=sub['nint']))
+            end = dict(i=sub['i'], reason=np.full(len(sub['i']), reason, np.int8), w=sub['w'], p=sub['p'], d=sub['d'],
+                       cls=path_class(sub['nb'], sub['nt'], sub['ntir'], sub['nsc']), nint=sub['nint'], nsc=sub['nsc'])
+            if record:
+                end['bid'] = sub['bid']
+            ends.append(end)
 
     while len(st['i']):
+        step += 1
         P, D, reg = st['p'], st['d'], st['reg']; n = len(P)
         best = np.full(n, np.inf); ev = np.full(n, _EV_NONE, np.int8)
         face = np.full(n, -1, np.int8); slab = np.full(n, -1, np.int16)
@@ -318,6 +374,12 @@ def trace(scene, p, d, lam, region, E=None, max_reflections=2, max_interactions=
                 s, f = box_entry(P[m], D[m], sl.lo, sl.hi, eps)
                 u = s < best[m]; mu = m[u]
                 best[mu] = s[u]; ev[mu] = _EV_ENTRY; face[mu] = f[u]; slab[mu] = j
+        for j in scat:
+            m = np.flatnonzero(reg == j)
+            if len(m):
+                s = -scene.slabs[j].scatter.length(st['lam'][m])*np.log1p(-rng.random(len(m)))
+                u = s < best[m]; mu = m[u]
+                best[mu] = s[u]; ev[mu] = _EV_SCATTER
         if mir is not None:
             m = np.flatnonzero(amb)
             if len(m):
@@ -333,6 +395,8 @@ def trace(scene, p, d, lam, region, E=None, max_reflections=2, max_interactions=
             best[mu] = s[u]; ev[mu] = _EV_SENSOR
         hit = P+np.where(np.isfinite(best), best, 0)[:, None]*D
         st['p'] = hit
+        if record:
+            fin = np.isfinite(best); rec.append((st['bid'][fin], step, hit[fin]))
         finish(_take(st, ev == _EV_NONE), 5)
         m = ev == _EV_SENSOR
         inside = (np.abs(hit[:, 0]-sen.cx) < sen.half)&(np.abs(hit[:, 1]-sen.cy) < sen.half)
@@ -347,9 +411,14 @@ def trace(scene, p, d, lam, region, E=None, max_reflections=2, max_interactions=
             finish(_take(st, mm&~onmir), 1)
             mm = onmir
         zf = ((ev == _EV_EXIT)|(ev == _EV_ENTRY))&(face >= 4)
-        capped = (mm|zf)&(st['nint'] >= max_interactions)
+        sc = ev == _EV_SCATTER
+        capped = (mm|zf|sc)&(st['nint'] >= max_interactions)
         finish(_take(st, capped), 4)
-        mm &= ~capped; zf &= ~capped
+        mm &= ~capped; zf &= ~capped; sc &= ~capped
+        if touch and zf.any():
+            atsen = zf&(face == 5)&(np.abs(hit[:, 2]-sen.z) < 1e-9)
+            finish(_take(st, atsen&inside), 0); finish(_take(st, atsen&~inside), 3)
+            zf &= ~atsen
         nxt = []
         if mm.any():
             r = _take(st, mm); nrm = (r['p']-np.asarray(mir.C))/mir.R
@@ -373,13 +442,44 @@ def trace(scene, p, d, lam, region, E=None, max_reflections=2, max_interactions=
             t['d'] = d_t[~tir]; t['w'] = t['w']*T[~tir]; t['reg'] = other[~tir]
             if E_t is not None:
                 t['E'] = E_t[~tir]
+            ft = face_t[j][~tir]
+            if np.any(ft < 1):
+                lost = dict(t); lost['w'] = t['w']*(1-ft)
+                if record:
+                    k = len(lost['i']); lost['bid'] = np.arange(len(parent), len(parent)+k)
+                    parent += list(t['bid']); split += [step]*k
+                finish(lost, 6)
+                t['w'] = t['w']*ft
             rr = dict(r); rr['d'] = d_r; rr['w'] = r['w']*R
             if E_r is not None:
                 rr['E'] = E_r
             rr['ntir'] = r['ntir']+tir
             rr['nb'] = r['nb']+(~tir&(f == 4)); rr['nt'] = r['nt']+(~tir&(f == 5))
+            if record:
+                k = len(rr['i']); rr['bid'] = np.arange(len(parent), len(parent)+k)
+                parent += list(r['bid']); split += [step]*k
             drop = ~tir&(rr['nb']+rr['nt'] > max_reflections)
             finish(_take(rr, drop), 4)
             nxt += [t, _take(rr, ~drop)]
+        if sc.any():
+            r = _take(st, sc)
+            r['d'], r['E'] = rayleigh_scatter(rng, r['d'], r['E'])
+            r['nsc'] = r['nsc']+1; r['nint'] = r['nint']+1
+            nxt.append(r)
         st = _cat(nxt) if nxt else _take(st, np.zeros(n, bool))
-    return _cat(ends) if ends else None
+    out = _cat(ends) if ends else None
+    if record and out is not None:
+        out['path'] = _paths(out['bid'], rec, parent, split)
+    return out
+
+
+def _paths(bids, rec, parent, split):
+    """Vertex lists of the branches bids from the trace records (branch id, step, point) and the split tree."""
+    B = np.concatenate([b for b, _, _ in rec]); S = np.concatenate([np.full(len(b), s) for b, s, _ in rec])
+    X = np.concatenate([x for _, _, x in rec]); o = np.lexsort((S, B)); B, S, X = B[o], S[o], X[o]
+    lo = np.searchsorted(B, np.arange(len(parent))); hi = np.searchsorted(B, np.arange(len(parent)), 'right')
+
+    def pts(b, upto):
+        own = X[lo[b]:hi[b]][S[lo[b]:hi[b]] <= upto]
+        return own if parent[b] < 0 else np.concatenate([pts(parent[b], split[b]), own])
+    return [pts(b, np.inf) for b in bids]

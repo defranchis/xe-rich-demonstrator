@@ -38,10 +38,19 @@ AEROGEL_HALF = 25.0          # half side of the 5 x 5 cm tile [mm]
 AEROGEL_T = 10.0             # thickness [mm]
 AEROGEL_N_AIR = 1.03         # refractive index as quoted in air
 AEROGEL_POROSITY = 0.97      # pore volume fraction used for the gas-filled index
+AEROGEL_LAMBDA_REF = 400.0   # wavelength at which the dispersive aerogel models equal AEROGEL_N_AIR [nm]
+AEROGEL_POLE_NM = 83.22      # single-pole aerogel dispersion lambda_0 [nm] (Bellunato et al., NIM A 595 (2008) 183)
+RAYLEIGH_C_AEROGEL = 0.005   # aerogel clarity C in Lambda = lambda^4/C [um^4/cm] (k4geo RAYLEIGH__Aerogel_BelleII)
+AEROGEL_SURFACE_A = 1.0      # aerogel surface factor A in T = A exp(-C t/lambda^4) (k4geo applies none)
+
+# SiPM protective window (part unknown) and the muon's direct hit
+WINDOW_N = 1.5               # refractive index
+WINDOW_T = 0.3               # thickness [mm]
+MIP_DIRECT_PE = 1.0          # fired cells from the muon crossing the silicon (one microcell at normal incidence)
 
 # Fixed values used in place of computed ones
-THC_GAS_3BAR = 0.0636        # Xe Cherenkov angle, 3 bar, 320-450 nm, beta = 1 [rad]
-THC_GAS_3BAR_400 = 0.0632    # Xe Cherenkov angle, 3 bar, 400 nm, beta = 1, drawn in the sketches [rad]
+THC_GAS_3BAR = 0.0636        # Xe Cherenkov angle, 3 bar, 320-450 nm, beta = 1 [rad] (Bideau-Mehu 1981 index; kept for the legacy regression)
+THC_GAS_3BAR_400 = 0.0632    # Xe Cherenkov angle, 3 bar, 400 nm, beta = 1, drawn in the sketches [rad] (Bideau-Mehu 1981 index; kept for the legacy regression)
 THETA_AERO_GAS = 0.249       # aerogel Cherenkov angle taken as the ring angle in the gas [rad]
 AERO_YIELD_PER_CM = 24.7     # emitted aerogel photons per cm, 320-450 nm
 GAS_YIELD_REF = 33.5         # emitted Xe photons over GAS_YIELD_REF_LEN, 3 bar, 320-450 nm

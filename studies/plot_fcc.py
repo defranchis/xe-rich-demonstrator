@@ -16,14 +16,15 @@ NSAMPLE = 20000              # tracks averaged per species and energy
 LAM_TH = 300                 # wavelength for the thresholds [nm]
 
 
-def pth(m, P, lam=LAM_TH):
-    return p_threshold(m, n_xe(lam, P))
+def pth(m, P, model, lam=LAM_TH):
+    return p_threshold(m, n_xe(lam, P, model=model))
 
 
 def main():
-    p = cli.parser(__doc__)
+    p = cli.xe_index(cli.parser(__doc__))
     p.add_argument('--momdir', type=Path, default=None, help='directory with mom_<key>.npz (default: outdir)')
     args = p.parse_args(); out = cli.outdir(args); momdir = args.momdir if args.momdir is not None else out
+    model = args.xe_index
     keys = SQRTS_KEYS
     D = {k: np.load(momdir/f'mom_{k}.npz') for k in keys}
     fig, ax = plt.subplots(2, 2, figsize=(11, 8.5))
@@ -33,7 +34,7 @@ def main():
         for k in keys:
             h, _ = np.histogram(D[k][sp], bins); a.step(bc, h/D[k]['N']/dl, where='mid', color=SQRTS[k], lw=1.8, label=SQRTS_LONG[k])
         for P, ls in ((2, '--'), (3, '-')):
-            a.axvline(pth(m, P), color='k', ls=ls, lw=1)
+            a.axvline(pth(m, P, model), color='k', ls=ls, lw=1)
         a.set_xscale('log'); a.set_xlabel('p [GeV]'); a.set_ylabel(f'{nm} per event / dlog₁₀p')
         a.set_title(f'{nm} momentum, |cosθ|<0.9  (lines: Xe threshold, -- 2 bar, — 3 bar)', fontsize=9.5)
         a.legend(fontsize=8); a.grid(alpha=.3, which='both')
@@ -44,7 +45,7 @@ def main():
             pp = D[k][sp]; pp = pp[pp > 1.0]
             pp = np.random.default_rng(1).choice(pp, size=min(len(pp), NSAMPLE), replace=False)
             for P, ls in ((2, '--'), (3, '-')):
-                s = np.mean([dN_dxdE(E, x, m, P) for x in pp], axis=0)
+                s = np.mean([dN_dxdE(E, x, m, P, model=model) for x in pp], axis=0)
                 a.plot(E, s, color=SQRTS[k], ls=ls, lw=1.6, label=f'{SQRTS_LONG[k]}, {P} bar')
         a.set_xlabel('photon energy [eV]'); a.set_ylabel('⟨d²N/dx dE⟩ per track [cm⁻¹ eV⁻¹]')
         a.set_title(f'Photon spectrum averaged over {nm} with p>1 GeV', fontsize=10)
@@ -57,7 +58,7 @@ def main():
             pp = D[k][sp]; N = D[k]['N']
             r = [k, sp, len(pp)/N, np.median(pp), np.mean(pp)]
             for P in (2, 3):
-                r += [np.mean(pp > pth(m, P)), np.mean((pp > pth(M_PI, P))&(pp < pth(M_K, P))) if sp == 'K' else np.nan]
+                r += [np.mean(pp > pth(m, P, model)), np.mean((pp > pth(M_PI, P, model))&(pp < pth(M_K, P, model))) if sp == 'K' else np.nan]
             r += [np.mean(pp > 20), np.mean(pp > 40)]
             rows.append(r)
     print('sqrt_s sp  n/ev  median mean | 2bar: f>th  f(thr-mode) | 3bar: f>th f(thr-mode) | f>20 f>40')

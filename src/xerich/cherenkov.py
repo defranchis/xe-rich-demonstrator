@@ -2,7 +2,7 @@
 import numpy as np
 
 from .constants import ALPHA, HBARC_EV_CM, HC, T_ROOM
-from .media import n_xe
+from .media import XE_INDEX_DEFAULT, n_xe
 
 # ARC SiPM quantum efficiency vs photon energy [eV], ARC_SiPM_QuantumEfficiency of the ARC simulation:
 # k4geo e1ba7bc, FCCee/CLD/compact/CLD_o3_v01/materials_arc_o1_v01.xml:6
@@ -38,14 +38,14 @@ def frank_tamm(n, b):
     return np.where(s2 > 0, ALPHA/HBARC_EV_CM*s2, 0.0)
 
 
-def dN_dxdE(E_eV, p, m, P_bar, T=T_ROOM):
-    """Frank-Tamm spectrum in Xe [eV^-1 cm^-1] at photon energy E_eV [eV]."""
-    return frank_tamm(n_xe(HC/E_eV, P_bar, T), beta(p, m))
+def dN_dxdE(E_eV, p, m, P_bar, T=T_ROOM, model=XE_INDEX_DEFAULT):
+    """Frank-Tamm spectrum in Xe [eV^-1 cm^-1] at photon energy E_eV [eV]; model is the n_xe index model."""
+    return frank_tamm(n_xe(HC/E_eV, P_bar, T, model), beta(p, m))
 
 
-def dN_dxdlam(lam_nm, p, m, P_bar, T=T_ROOM):
-    """Frank-Tamm spectrum in Xe [nm^-1 cm^-1] at wavelength lam_nm [nm]."""
-    return dN_dxdE(HC/lam_nm, p, m, P_bar, T)*(HC/lam_nm**2)
+def dN_dxdlam(lam_nm, p, m, P_bar, T=T_ROOM, model=XE_INDEX_DEFAULT):
+    """Frank-Tamm spectrum in Xe [nm^-1 cm^-1] at wavelength lam_nm [nm]; model is the n_xe index model."""
+    return dN_dxdE(HC/lam_nm, p, m, P_bar, T, model)*(HC/lam_nm**2)
 
 
 def energy_grid(lam_lo, lam_hi, n):
@@ -53,9 +53,9 @@ def energy_grid(lam_lo, lam_hi, n):
     return np.linspace(HC/lam_hi, HC/lam_lo, n)
 
 
-def photon_yield(E, p, m, P_bar, T=T_ROOM):
-    """Emitted photons per cm in Xe integrated over the energy grid E [eV] (trapezoid rule)."""
-    return np.trapezoid(dN_dxdE(E, p, m, P_bar, T), E)
+def photon_yield(E, p, m, P_bar, T=T_ROOM, model=XE_INDEX_DEFAULT):
+    """Emitted photons per cm in Xe integrated over the energy grid E [eV] (trapezoid rule); model is the n_xe index model."""
+    return np.trapezoid(dN_dxdE(E, p, m, P_bar, T, model), E)
 
 
 def qe_arc(E_eV):

@@ -19,9 +19,9 @@ N_MU = 20000
 
 
 def main():
-    out = cli.outdir(cli.parser(__doc__).parse_args())
+    args = cli.xe_index(cli.parser(__doc__)).parse_args(); out = cli.outdir(args)
     rng = np.random.default_rng(7)
-    ng = Radiator(P_BAR).n(LAM)
+    ng = Radiator(P_BAR, model=args.xe_index).n(LAM)
     aero = Aerogel(n=aerogel_index(ng)); sensor = Sensor(SENSOR_HALF_2IN)
     flux_hz = flux_through_square(2*sensor.half*1e-3, MUON_THMAX)
     print('n_gas=%.5f n_aero=%.4f theta_aero=%.1f mrad theta_gas=%.1f mrad; muons through 5.1x5.1 cm SiPM: %.0f /h'

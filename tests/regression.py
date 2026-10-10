@@ -21,6 +21,7 @@ REPO = Path(__file__).resolve().parents[1]
 KEYS = ('91', '160', '240', '365')
 SIMPLE = ('raytrace', 'cosmic_acc', 'cosmic_acc2', 'toy_aerogel', 'toy_scan', 'toy_prox',
           'plot_spectra', 'sketch', 'sketch_phase1')
+XE_INDEX = ('cosmic_acc2', 'toy_aerogel', 'toy_scan', 'toy_prox', 'plot_spectra', 'toy_plots', 'plot_lambda', 'plot_fcc')
 NUM = re.compile(r'[-+]?(?:\d+\.\d*|\.\d+|\d+)(?:[eE][-+]?\d+)?')
 
 
@@ -29,7 +30,8 @@ def job_table(mode, out, nevt):
     if mode == 'legacy':
         cmd = lambda s, *a: [sys.executable, str(REPO / 'legacy' / f'{s}.py'), *a]
     else:
-        cmd = lambda s, *a: [sys.executable, str(REPO / 'studies' / f'{s}.py'), '--outdir', str(out), *a]
+        cmd = lambda s, *a: [sys.executable, str(REPO / 'studies' / f'{s}.py'), '--outdir', str(out), *a,
+                             *(('--xe-index', 'bm1981') if s in XE_INDEX else ())]   # the legacy scripts use Bideau-Mehu 1981
     jobs = {s: (cmd(s), ()) for s in SIMPLE}
     jobs['toy_plots'] = (cmd('toy_plots'), ('toy_aerogel',))
     if importlib.util.find_spec('pythia8mc') is not None:

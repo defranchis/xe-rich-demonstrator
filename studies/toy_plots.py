@@ -19,7 +19,7 @@ LAM = 400                    # wavelength for the indices [nm]
 
 
 def main():
-    p = cli.parser(__doc__)
+    p = cli.xe_index(cli.parser(__doc__))
     p.add_argument('--input', type=Path, default=None, help='toy_76.npz from toy_aerogel.py (default: <outdir>/toy_76.npz)')
     args = p.parse_args(); out = cli.outdir(args)
     r = dict(np.load(args.input if args.input is not None else out/'toy_76.npz'))
@@ -42,7 +42,7 @@ def main():
     a2.set_ylabel('fraction of muons', color=MUTED); a2.set_ylim(0, 0.4)
     a.set_zorder(a2.get_zorder()+1); a.patch.set_visible(False); a.legend(fontsize=8.5, loc='upper right'); a.grid(alpha=.3)
 
-    ng = Radiator(P_BAR).n(LAM)
+    ng = Radiator(P_BAR, model=args.xe_index).n(LAM)
     toy = MirrorToy(Mirror(MIRROR_R, MIRROR_D), Sensor(SENSOR_HALF_2IN), Aerogel(n=aerogel_index(ng)), ng)
     hs = SENSOR_HALF_PROTO
     rng = np.random.default_rng(11)

@@ -1,0 +1,1 @@
+`doc_values.py`: design-doc values that depend on the Xe index (sections 1.1–1.3, 2.2, 6.3) for each index model, the Xe density against NIST, the aerogel θc spread of the dispersion options and the single-pass Rayleigh fractions of the tile, and the Börzsönyi index against Koch's UV data. Run `python scripts/investigations/xe_index/doc_values.py`.

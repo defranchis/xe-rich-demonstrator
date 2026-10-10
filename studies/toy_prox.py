@@ -13,9 +13,9 @@ LAM = 400                    # wavelength for the indices [nm]
 
 
 def main():
-    cli.parser(__doc__).parse_args()
+    model = cli.xe_index(cli.parser(__doc__)).parse_args().xe_index
     rng_mu = np.random.default_rng(7); rng_xy = np.random.default_rng(5)
-    ng = Radiator(P_BAR).n(LAM); aero = Aerogel(n=aerogel_index(ng)); sensor = Sensor(SENSOR_HALF_PROTO)
+    ng = Radiator(P_BAR, model=model).n(LAM); aero = Aerogel(n=aerogel_index(ng)); sensor = Sensor(SENSOR_HALF_PROTO)
     z0 = Mirror(MIRROR_R).f
 
     def sampler(n):

@@ -9,8 +9,9 @@ import pytest
 from xerich import sim, tracer
 from xerich.cherenkov import QE_ARC, QE_ARC_E_EV, PhotonSpectrum, frank_tamm, qe_arc, qe_band, theta_c
 from xerich.constants import AEROGEL_N_AIR, ALPHA, HBARC_EV_CM, HC, MIRROR_D, MIRROR_R, SENSOR_HALF_2IN
-from xerich.layout import Aerogel, Mirror, Phase1Layout, Sensor
-from xerich.media import C4F10_E_EV, C4F10_N, N_AIR, ConstantIndex, Medium, aerogel_constant, n_c4f10, xenon
+from xerich.layout import Aerogel, Mirror, Phase1Layout, Sensor, Window
+from xerich.media import (AEROGEL_K4GEO_E_EV, AEROGEL_K4GEO_N, C4F10_E_EV, C4F10_N, N_AIR, ConstantIndex, Medium, Rayleigh,
+                          aerogel_constant, n_c4f10, xenon)
 
 K4GEO = os.environ.get('XERICH_K4GEO')
 MATERIALS = 'FCCee/CLD/compact/CLD_o3_v01/materials_arc_o1_v01.xml'
@@ -45,11 +46,14 @@ def test_k4geo_tables_embedded():
     cites = (src/'cherenkov.py').read_text()+(src/'media.py').read_text()
     cited = {int(a or b) for a, b in re.findall(r'materials_arc_o1_v01\.xml:(\d+)|same file, line (\d+)', cites)}
     lines = {}
-    for name, E, v in (('RINDEX__C4F10_PFRICH', C4F10_E_EV, C4F10_N), ('ARC_SiPM_QuantumEfficiency', QE_ARC_E_EV, QE_ARC)):
+    for name, E, v in (('RINDEX__C4F10_PFRICH', C4F10_E_EV, C4F10_N), ('ARC_SiPM_QuantumEfficiency', QE_ARC_E_EV, QE_ARC),
+                       ('RINDEX__Aerogel_PFRICH', AEROGEL_K4GEO_E_EV, AEROGEL_K4GEO_N)):
         lines[name], Ex, vx = k4geo_matrix(text, name)
         assert list(E) == Ex and list(v) == vx
     lines['RINDEX__Air'], Ea, va = k4geo_matrix(text, 'RINDEX__Air')
     assert set(va) == {N_AIR} and Ea[0] <= 1.0 and Ea[-1] >= 5.1
+    lines['RAYLEIGH__Aerogel_BelleII'], Er, Lr = k4geo_matrix(text, 'RAYLEIGH__Aerogel_BelleII')
+    assert np.allclose(Rayleigh().length(HC/np.array(Er)), Lr, rtol=0.02)   # lambda^4/C within the rounding of the energies
     assert cited == set(lines.values())            # source comments cite the line of each <matrix> tag
 
 
@@ -127,3 +131,29 @@ def test_onaxis_aerogel_light_is_fresnel_only():
     r = np.hypot(e['p'][det, 0], e['p'][det, 1])
     gap = np.tan(np.arcsin(AEROGEL_N_AIR*np.sin(ta)/ng))
     assert np.all(r > 10*np.tan(ta)+gap-1e-9) and np.all(r < 20*np.tan(ta)+gap+1e-9)
+
+
+def test_track_segments_with_window():
+    lay = Phase1Layout(Mirror(MIRROR_R, MIRROR_D), Sensor(SENSOR_HALF_2IN), xenon(3), Aerogel(AEROGEL_N_AIR), window=Window(1.5, 0.3))
+    f = lay.mirror.f
+    seg = sim.track_segments(lay, (0, 0, f), (0, 0, -1))
+    assert np.allclose(seg['window'], [(0.0, 0.3)]) and np.allclose(seg['tile'], [(1.0, 11.0)])
+    assert np.allclose(seg['gas'], [(0.3, 1.0), (11.0, f)])
+    assert len(lay.scene().slabs) == 2 and len(phase1(xenon(3)).scene().slabs) == 1
+
+
+@pytest.mark.parametrize('n_w,t', [(1.5, 0.3), (1.45, 0.1), (1.55, 0.5)])
+def test_window_cluster(n_w, t):
+    """Window light is totally reflected at its bottom face and lands at (2t - d) tan(theta_c), d = depth below the silicon."""
+    lay = phase1(xenon(3)); lo, hi = qe_band()
+    sp = PhotonSpectrum(ConstantIndex(n_w), lo, hi)
+    ph, e = sim.window_cluster(lay, np.random.default_rng(7), sp, 20000, Window(n_w, t))
+    det = e['reason'] == 0
+    assert det.all() and np.all(e['cls'] == 3) and np.allclose(e['w'], 1)
+    st = sim.cluster_stats(ph, e)
+    assert st['n'] == pytest.approx(ALPHA/HBARC_EV_CM*(1-1/n_w**2)*(hi-lo)*t/10, rel=1e-9)
+    tt = np.tan(theta_c(n_w)); r = np.hypot(e['p'][:, 0], e['p'][:, 1])
+    assert np.all(r > t*tt-1e-9) and np.all(r < 2*t*tt+1e-9) and st['r_mean'] == pytest.approx(1.5*t*tt, rel=5e-3)
+    assert np.allclose(e['p'][:, 2], lay.z_sensor)
+    sq = sim.cluster_stats(ph, e, weight=lambda lam: qe_arc(HC/lam))
+    assert sq['n'] == pytest.approx(PhotonSpectrum(ConstantIndex(n_w), lo, hi, weight=qe_arc).yield_per_mm*t, rel=0.01)

@@ -5,9 +5,12 @@
 - MirrorToy: 3D toy of the mirror setup with an aerogel tile under the sensor.
 - proximity: proximity-focusing aerogel toy.
 - track_segments, emit_photons, muon_photons, onaxis_muon: Cherenkov photons of one muon
-  in a Phase1Layout, sampled in wavelength and traced with Fresnel optics (tracer.trace).
-No photodetection efficiency, reflectivity, scattering or absorption is applied.
+  in a Phase1Layout, sampled in wavelength and traced with Fresnel optics and optional Rayleigh
+  scattering in the tile (tracer.trace); window_cluster: the muon's own hit on the SiPM.
+No photodetection efficiency, reflectivity or absorption is applied.
 """
+from dataclasses import replace
+
 import numpy as np
 
 from . import tracer
@@ -208,31 +211,39 @@ def proximity(aerogel, sensor, gap, n_gas, sampler, N=40000, ns=6, nphi=72, thma
     return rate*np.mean(fa >= .8), rate*np.mean(arc >= .5)
 
 
-def track_segments(layout, p0, u):
-    """Path-length intervals of the track p0 + s u (s >= 0) in the gas and in the tile, up to the mirror sphere.
+def _box_interval(p0, u, lo, hi, s_end):
+    """[(s0, s1)] where the track p0 + s u, 0 <= s <= s_end, lies in the box [lo, hi], or []."""
+    lo = np.asarray(lo, float); hi = np.asarray(hi, float)
+    with np.errstate(divide='ignore'):
+        t1 = (lo-p0)/u; t2 = (hi-p0)/u
+    par = u == 0; within = (p0 >= lo)&(p0 <= hi)
+    tn = np.max(np.where(par, np.where(within, -np.inf, np.inf), np.minimum(t1, t2)))
+    tf = np.min(np.where(par, np.where(within, np.inf, -np.inf), np.maximum(t1, t2)))
+    tn, tf = max(tn, 0.0), min(tf, s_end)
+    return [(tn, tf)] if tf > tn else []
 
-    Returns {'gas': [(s0, s1), ...], 'tile': [(s0, s1)] or []}.
+
+def track_segments(layout, p0, u):
+    """Path-length intervals of the track p0 + s u (s >= 0) in the gas, the tile and the window, up to the mirror sphere.
+
+    Returns {'gas': [(s0, s1), ...], 'tile': [(s0, s1)] or [], 'window': [(s0, s1)] or []}.
     """
     p0 = np.asarray(p0, float); u = np.asarray(u, float)
     m = p0-np.array([0, 0, layout.mirror.R]); b = m@u; c = m@m-layout.mirror.R**2
     s_end = -b+np.sqrt(b*b-c)
-    tile = []
+    tile, window = [], []
     if layout.tile is not None:
-        h = layout.tile.half; lo = np.array([-h, -h, layout.z_tile_bottom]); hi = np.array([h, h, layout.z_tile_top])
-        with np.errstate(divide='ignore'):
-            t1 = (lo-p0)/u; t2 = (hi-p0)/u
-        par = u == 0; within = (p0 >= lo)&(p0 <= hi)
-        tn = np.max(np.where(par, np.where(within, -np.inf, np.inf), np.minimum(t1, t2)))
-        tf = np.min(np.where(par, np.where(within, np.inf, -np.inf), np.maximum(t1, t2)))
-        tn, tf = max(tn, 0.0), min(tf, s_end)
-        if tf > tn:
-            tile = [(tn, tf)]
+        h = layout.tile.half
+        tile = _box_interval(p0, u, (-h, -h, layout.z_tile_bottom), (h, h, layout.z_tile_top), s_end)
+    if layout.window is not None:
+        h = layout.sensor.half
+        window = _box_interval(p0, u, (-h, -h, layout.z_window_bottom), (h, h, layout.z_sensor), s_end)
     gas, s = [], 0.0
-    for a, b_ in tile+[(s_end, s_end)]:
+    for a, b_ in sorted(tile+window)+[(s_end, s_end)]:
         if a > s:
             gas.append((s, a))
         s = b_
-    return {'gas': gas, 'tile': tile}
+    return {'gas': gas, 'tile': tile, 'window': window}
 
 
 def emit_photons(rng, p0, u, segments, n, spectrum):
@@ -255,30 +266,59 @@ def emit_photons(rng, p0, u, segments, n, spectrum):
     return np.asarray(p0, float)+s[:, None]*u, d, lam, tracer.cherenkov_field(u[None], d)
 
 
-def muon_photons(layout, rng, p0, u, spectra, n_gas, n_tile, max_reflections=2, polarised=True):
+def muon_photons(layout, rng, p0, u, spectra, n_gas, n_tile, max_reflections=2, polarised=True, n_window=0,
+                 record=False):
     """Trace the Cherenkov photons of one muon (track p0 + s u, s >= 0) through the layout.
 
-    spectra = {'gas': PhotonSpectrum in the gas, 'tile': PhotonSpectrum in the tile}; n_gas and
-    n_tile photons are sampled from each. Returns (photons, ends): photons holds per sampled photon
-    the wavelength lam [nm], origin (0 gas, 1 tile) and weight (emitted photons per muon that each
-    sampled photon stands for); ends is the tracer.trace output, whose index i refers to photons.
-    max_reflections and polarised (False: unpolarised Fresnel) are passed to tracer.trace.
+    spectra = {'gas': PhotonSpectrum in the gas, 'tile': PhotonSpectrum in the tile, 'window': PhotonSpectrum
+    in the window (needed only if n_window > 0)}; n_gas, n_tile and n_window photons are sampled from each.
+    Returns (photons, ends): photons holds per sampled photon the wavelength lam [nm], origin (0 gas,
+    1 tile, 2 window) and weight (emitted photons per muon that each sampled photon stands for); ends is
+    the tracer.trace output, whose index i refers to photons. max_reflections, polarised (False:
+    unpolarised Fresnel) and record are passed to tracer.trace, with rng for the Rayleigh scattering.
     """
     seg = track_segments(layout, p0, u)
+    slab = {'tile': 0, 'window': int(layout.tile is not None)}
     parts, norm = [], []
-    for org, key, n in ((0, 'gas', n_gas), (1, 'tile', n_tile)):
+    for org, key, n in ((0, 'gas', n_gas), (1, 'tile', n_tile), (2, 'window', n_window)):
         if n == 0 or not seg[key]:
             continue
         p, d, lam, E = emit_photons(rng, p0, u, seg[key], n, spectra[key])
         L = sum(b-a for a, b in seg[key])
-        parts.append((p, d, lam, E, np.full(n, org, np.int8), np.full(n, -1 if org == 0 else 0, np.int16)))
+        parts.append((p, d, lam, E, np.full(n, org, np.int8), np.full(n, -1 if org == 0 else slab[key], np.int16)))
         norm.append(np.full(n, spectra[key].yield_per_mm*L/n))
     p, d, lam, E, org, reg = (np.concatenate(x) for x in zip(*parts))
-    ends = tracer.trace(layout.scene(), p, d, lam, reg, E if polarised else None, max_reflections)
+    ends = tracer.trace(layout.scene(), p, d, lam, reg, E if polarised else None, max_reflections, rng=rng, record=record)
     return {'lam': lam, 'origin': org, 'weight': np.concatenate(norm)}, ends
 
 
-def onaxis_muon(layout, rng, spectra, n_gas, n_tile, max_reflections=2, polarised=True):
+def onaxis_muon(layout, rng, spectra, n_gas, n_tile, max_reflections=2, polarised=True, n_window=0, record=False):
     """muon_photons for a vertical muon on the mirror axis entering at the sensor plane and moving towards the mirror."""
     return muon_photons(layout, rng, (0.0, 0.0, layout.z_sensor), (0.0, 0.0, -1.0), spectra, n_gas, n_tile,
-                        max_reflections, polarised)
+                        max_reflections, polarised, n_window, record)
+
+
+def window_cluster(layout, rng, spectrum, n, window=None, polarised=True, record=False):
+    """The muon's own SiPM hit: Cherenkov light of a vertical on-axis muon in the SiPM window.
+
+    The muon crosses the silicon, then the window (layout.window, else window, a layout.Window) on its way
+    down; its light reaches the silicon after total internal reflection at the window bottom face.
+    spectrum: PhotonSpectrum in the window; n sampled photons. Returns (photons, ends) as onaxis_muon,
+    with only window photons (origin 2); the direct hit of the muon (constants.MIP_DIRECT_PE) is not included.
+    """
+    if layout.window is None:
+        layout = replace(layout, window=window)
+    return onaxis_muon(layout, rng, {'window': spectrum}, 0, 0, polarised=polarised, n_window=n, record=record)
+
+
+def cluster_stats(ph, ends, weight=None):
+    """Photons per muon reaching the sensor and their radial spread around the impact point (0, 0).
+
+    weight(lam) (e.g. lambda lam: qe_arc(HC/lam)) multiplies each photon; returns the dict n (photons
+    per muon on the sensor), r_mean, r_rms and r_max [mm] (weighted, about the axis).
+    """
+    det = ends['reason'] == 0; i = ends['i'][det]
+    w = ph['weight'][i]*ends['w'][det]*(1.0 if weight is None else weight(ph['lam'][i]))
+    r = np.hypot(ends['p'][det, 0], ends['p'][det, 1])
+    return {'n': w.sum(), 'r_mean': np.average(r, weights=w), 'r_rms': np.sqrt(np.average(r**2, weights=w)),
+            'r_max': r.max()}

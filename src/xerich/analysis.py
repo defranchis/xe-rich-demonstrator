@@ -2,6 +2,9 @@
 import numpy as np
 
 from .constants import COSMIC_I0
+from .tracer import REASONS
+
+SCATTER_LAM_EDGES = np.arange(260.0, 961.0, 10.0)   # wavelength bins of the scattered-fraction histograms [nm]
 
 
 def azimuths(n):
@@ -37,3 +40,16 @@ def pixel_sigma(pitch, f):
 def binned_mean(v, idx, nbins):
     """Mean of v in each bin, for bin indices idx (e.g. np.digitize(x, edges) - 1)."""
     return np.array([v[idx == b].mean() for b in range(nbins)])
+
+
+def scattered_fraction(lam_end, oi):
+    """Per wavelength bin: weight of origin oi with >= 1 Rayleigh scatter over the weight reaching the tile.
+
+    lam_end: one weighting, shape (origin, reason, scattered, wavelength bin). Gas photons (oi = 0) lost at the
+    mirror aperture without scattering never reach the tile and are left out of the denominator.
+    """
+    le = lam_end[oi]; tot = le.sum((0, 1))
+    if oi == 0:
+        tot = tot-le[REASONS.index('mirror aperture'), 0]
+    with np.errstate(invalid='ignore', divide='ignore'):
+        return le[:, 1].sum(0)/tot

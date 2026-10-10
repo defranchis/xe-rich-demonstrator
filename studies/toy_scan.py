@@ -14,9 +14,9 @@ N_MU = 12000
 
 
 def main():
-    cli.parser(__doc__).parse_args()
+    model = cli.xe_index(cli.parser(__doc__)).parse_args().xe_index
     rng = np.random.default_rng(7)
-    ng = Radiator(P_BAR).n(LAM); aero = Aerogel(n=aerogel_index(ng))
+    ng = Radiator(P_BAR, model=model).n(LAM); aero = Aerogel(n=aerogel_index(ng))
     rate = flux_through_square(2*aero.half*1e-3, MUON_THMAX)*3600
     print('muons through 5x5 cm tile: %.0f /h' % rate)
     print('sensor     mirror   | aerogel: <arc> | arc>=50%%/h  arc>=90%%/h  >=8 emitted/h  >=15 emitted/h | gas >=80%% cone /h')

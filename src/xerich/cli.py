@@ -3,6 +3,8 @@ import argparse
 import os
 from pathlib import Path
 
+from .media import XE_INDEX_DEFAULT, XE_INDEX_MODELS
+
 
 def default_outdir():
     """$XERICH_OUT if set, else xerich-output/ next to the repository checkout."""
@@ -15,6 +17,13 @@ def parser(doc):
     p = argparse.ArgumentParser(description=doc)
     p.add_argument('--outdir', type=Path, default=None,
                    help='output directory (default: $XERICH_OUT, else xerich-output/ next to the repository)')
+    return p
+
+
+def xe_index(p):
+    """Add the --xe-index option (Xe refractive-index model of media.n_xe) to the parser p."""
+    p.add_argument('--xe-index', choices=XE_INDEX_MODELS, default=XE_INDEX_DEFAULT,
+                   help='Xe refractive-index model: borzsonyi (Boerzsoenyi 2008) or bm1981 (Bideau-Mehu 1981); default %(default)s')
     return p
 
 
