@@ -69,6 +69,18 @@ def qe_band():
     return float(E[i[0]-1]), float(E[i[-1]+1])
 
 
+def chromatic_rms(index, weight=qe_arc, band=None, ngrid=4001):
+    """rms [rad] of the beta = 1 Cherenkov angle over the Frank-Tamm x weight spectrum (index n(lambda [nm]), band
+    (E_lo, E_hi) [eV] default qe_band(), weight(E) default the ARC SiPM QE, None for pure FT)."""
+    E = np.linspace(*(qe_band() if band is None else band), ngrid); ct = 1/index(HC/E)
+    w = ALPHA/HBARC_EV_CM*(1-ct**2)
+    if weight is not None:
+        w = w*weight(E)
+    th = np.arccos(ct)
+    m = np.trapezoid(w*th, E)/np.trapezoid(w, E)
+    return float(np.sqrt(np.trapezoid(w*(th-m)**2, E)/np.trapezoid(w, E)))
+
+
 class PhotonSpectrum:
     """Frank-Tamm spectrum d2N/dx dE of a particle of velocity beta in a medium, over photon energies E_lo-E_hi [eV].
 

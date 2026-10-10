@@ -5,8 +5,8 @@ from typing import Callable
 
 import numpy as np
 
-from .constants import (AEROGEL_LAMBDA_REF, AEROGEL_N_AIR, AEROGEL_POLE_NM, AEROGEL_POROSITY, AEROGEL_SURFACE_A, HC, P0,
-                        R_GAS, RAYLEIGH_C_AEROGEL, T0, T_ROOM)
+from .constants import (AEROGEL_LAMBDA_REF, AEROGEL_N_AIR, AEROGEL_POLE_NM, AEROGEL_POROSITY, AEROGEL_POROSITY_AIRREF,
+                        AEROGEL_SURFACE_A, HC, P0, R_GAS, RAYLEIGH_C_AEROGEL, T0, T_ROOM)
 
 # Xe second virial coefficient B(T) = B_XE_293 + B_XE_SLOPE (T - B_XE_TREF), approximate (Dymond & Smith)
 B_XE_293 = -130.0            # [cm^3/mol]
@@ -93,6 +93,11 @@ def n_xe(lam_nm, P_bar, T=T_ROOM, model=XE_INDEX_DEFAULT):
 def aerogel_index(n_gas, n_air=AEROGEL_N_AIR, porosity=AEROGEL_POROSITY):
     """Aerogel index with gas of index n_gas in the pores: n_air + porosity (n_gas - 1)."""
     return n_air+porosity*(n_gas-1)
+
+
+def aerogel_index_air(n_gas, n_air=AEROGEL_N_AIR, porosity=AEROGEL_POROSITY_AIRREF, n_gas_ref=N_AIR):
+    """Aerogel index with gas of index n_gas in the pores, shifted from the in-air value: n_air + porosity (n_gas - n_gas_ref)."""
+    return n_air+porosity*(n_gas-n_gas_ref)
 
 
 def pore_index_shift(n_gas, porosity=AEROGEL_POROSITY):
