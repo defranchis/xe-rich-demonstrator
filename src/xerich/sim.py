@@ -4,6 +4,8 @@
 - ring_rate_full, ring_rate_partial: cosmic gas-ring rates with a flat-mirror footprint.
 - MirrorToy: 3D toy of the mirror setup with an aerogel tile under the sensor.
 - proximity: proximity-focusing aerogel toy.
+- track_segments, emit_photons, muon_photons, onaxis_muon: Cherenkov photons of one muon
+  in a Phase1Layout, sampled in wavelength and traced with Fresnel optics (tracer.trace).
 No photodetection efficiency, reflectivity, scattering or absorption is applied.
 """
 import numpy as np
@@ -11,7 +13,7 @@ import numpy as np
 from . import tracer
 from .analysis import azimuths, mc_rate, ring_fraction_in_square, ring_in_square
 from .cherenkov import theta_c
-from .constants import AERO_YIELD_PER_CM, GAS_YIELD_REF, GAS_YIELD_REF_LEN, MUON_THMAX
+from .constants import AERO_YIELD_PER_CM, GAS_YIELD_REF, GAS_YIELD_REF_LEN, HC, MUON_THMAX
 from .muons import flux_through_square, sample_box
 
 UP = np.array([0, 0, 1.])
@@ -204,3 +206,79 @@ def proximity(aerogel, sensor, gap, n_gas, sampler, N=40000, ns=6, nphi=72, thma
     rate = flux_through_square(2*tile*1e-3, thmax)*3600
     fa = acc.mean((1, 2)); arc = acc.any(1).mean(1)
     return rate*np.mean(fa >= .8), rate*np.mean(arc >= .5)
+
+
+def track_segments(layout, p0, u):
+    """Path-length intervals of the track p0 + s u (s >= 0) in the gas and in the tile, up to the mirror sphere.
+
+    Returns {'gas': [(s0, s1), ...], 'tile': [(s0, s1)] or []}.
+    """
+    p0 = np.asarray(p0, float); u = np.asarray(u, float)
+    m = p0-np.array([0, 0, layout.mirror.R]); b = m@u; c = m@m-layout.mirror.R**2
+    s_end = -b+np.sqrt(b*b-c)
+    tile = []
+    if layout.tile is not None:
+        h = layout.tile.half; lo = np.array([-h, -h, layout.z_tile_bottom]); hi = np.array([h, h, layout.z_tile_top])
+        with np.errstate(divide='ignore'):
+            t1 = (lo-p0)/u; t2 = (hi-p0)/u
+        par = u == 0; within = (p0 >= lo)&(p0 <= hi)
+        tn = np.max(np.where(par, np.where(within, -np.inf, np.inf), np.minimum(t1, t2)))
+        tf = np.min(np.where(par, np.where(within, np.inf, -np.inf), np.maximum(t1, t2)))
+        tn, tf = max(tn, 0.0), min(tf, s_end)
+        if tf > tn:
+            tile = [(tn, tf)]
+    gas, s = [], 0.0
+    for a, b_ in tile+[(s_end, s_end)]:
+        if a > s:
+            gas.append((s, a))
+        s = b_
+    return {'gas': gas, 'tile': tile}
+
+
+def emit_photons(rng, p0, u, segments, n, spectrum):
+    """n Cherenkov photons from the track p0 + s u, with s uniform over the intervals segments in one medium.
+
+    Photon energies come from spectrum (cherenkov.PhotonSpectrum), the emission angle from
+    cos(theta) = 1/(beta n(lambda)) per photon, the azimuth is uniform and the polarisation lies
+    in the plane of the track and the photon. Returns points, directions, wavelengths [nm] and
+    polarisation vectors.
+    """
+    u = np.asarray(u, float)
+    L = np.array([b-a for a, b in segments]); a0 = np.array([a for a, _ in segments])
+    k = rng.choice(len(L), n, p=L/L.sum())
+    s = a0[k]+rng.random(n)*L[k]
+    lam = HC/spectrum.sample(rng, n)
+    phi = rng.uniform(0, 2*np.pi, n)
+    ct = 1/(spectrum.beta*spectrum.index(lam)); st = np.sqrt(1-ct**2)
+    e1, e2 = tracer.basis(u[None])
+    d = ct[:, None]*u+st[:, None]*(np.cos(phi)[:, None]*e1+np.sin(phi)[:, None]*e2)
+    return np.asarray(p0, float)+s[:, None]*u, d, lam, tracer.cherenkov_field(u[None], d)
+
+
+def muon_photons(layout, rng, p0, u, spectra, n_gas, n_tile, max_reflections=2, polarised=True):
+    """Trace the Cherenkov photons of one muon (track p0 + s u, s >= 0) through the layout.
+
+    spectra = {'gas': PhotonSpectrum in the gas, 'tile': PhotonSpectrum in the tile}; n_gas and
+    n_tile photons are sampled from each. Returns (photons, ends): photons holds per sampled photon
+    the wavelength lam [nm], origin (0 gas, 1 tile) and weight (emitted photons per muon that each
+    sampled photon stands for); ends is the tracer.trace output, whose index i refers to photons.
+    max_reflections and polarised (False: unpolarised Fresnel) are passed to tracer.trace.
+    """
+    seg = track_segments(layout, p0, u)
+    parts, norm = [], []
+    for org, key, n in ((0, 'gas', n_gas), (1, 'tile', n_tile)):
+        if n == 0 or not seg[key]:
+            continue
+        p, d, lam, E = emit_photons(rng, p0, u, seg[key], n, spectra[key])
+        L = sum(b-a for a, b in seg[key])
+        parts.append((p, d, lam, E, np.full(n, org, np.int8), np.full(n, -1 if org == 0 else 0, np.int16)))
+        norm.append(np.full(n, spectra[key].yield_per_mm*L/n))
+    p, d, lam, E, org, reg = (np.concatenate(x) for x in zip(*parts))
+    ends = tracer.trace(layout.scene(), p, d, lam, reg, E if polarised else None, max_reflections)
+    return {'lam': lam, 'origin': org, 'weight': np.concatenate(norm)}, ends
+
+
+def onaxis_muon(layout, rng, spectra, n_gas, n_tile, max_reflections=2, polarised=True):
+    """muon_photons for a vertical muon on the mirror axis entering at the sensor plane and moving towards the mirror."""
+    return muon_photons(layout, rng, (0.0, 0.0, layout.z_sensor), (0.0, 0.0, -1.0), spectra, n_gas, n_tile,
+                        max_reflections, polarised)

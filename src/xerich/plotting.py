@@ -14,6 +14,7 @@ LIGHT = '#9ca3af'; GRID = '#d1d5db'; SCINT = '#10b981'; SCINT_EDGE = '#047857'
 
 # Physics plots
 PRESSURE = {2: '#1f6fb4', 3: '#d1495b'}
+RADIATOR = {'xe2': PRESSURE[2], 'xe3': PRESSURE[3], 'c4f10': '#2a9d8f'}
 SPECIES = {'pi': '#2a9d8f', 'K': '#e76f51', 'p': '#6d597a'}
 SQRTS_KEYS = ['91', '160', '240', '365']
 SQRTS = {'91': '#264653', '160': '#2a9d8f', '240': '#e9c46a', '365': '#e76f51'}
