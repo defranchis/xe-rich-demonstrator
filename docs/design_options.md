@@ -1,6 +1,6 @@
 # Xe RICH demonstrator: summary of the options explored
 
-This summarises the design exploration of 8–10 October 2026 for a lab demonstrator of pressurised xenon as the ARC gas radiator. The scripts in `scripts/` produce every number quoted here, and the plots are in `figures/`. Assumptions and simplifications are listed in the [README](../README.md).
+This summarises the design exploration of 8–10 October 2026 for a lab demonstrator of pressurised xenon as the ARC gas radiator. The study drivers in `studies/` produce every number quoted here, and the plots are in `figures/`. Assumptions and simplifications are listed in the [README](../README.md).
 
 **Status in one paragraph.** Phase 1 is gas-only ring imaging with cosmic muons. It uses a stock 3" spherical mirror with f ≈ 203 mm, a 2" × 2" SiPM plane at its focus and ~20 cm of Xe at 2–3 bar. The aerogel cannot be imaged in this geometry. It moves to a separate proximity-focusing configuration (phase 2), which also measures how Xe in the pores shifts the aerogel index. A full-size, ARC-like cell needs a custom mirror and is left for later.
 
@@ -14,7 +14,7 @@ This summarises the design exploration of 8–10 October 2026 for a lab demonstr
 - The **detected** peak is set by the product of mirror reflectivity, window transmission and SiPM PDE. With standard SiPMs it falls at ~300–350 nm.
 - About 53 % of the photons emitted in 200–600 nm lie below 300 nm.
 
-### 1.2 Xe optical constants (`xe_optics.py`)
+### 1.2 Xe optical constants (`xerich.media`)
 These use the Bideau-Mehu (1981) Sellmeier formula, scaled with Lorentz–Lorenz plus a virial correction. Xe is ~1.6 % non-ideal at 3 bar. All values are at 20 °C.
 
 | | 2 bar | 3 bar |
