@@ -21,7 +21,9 @@ REPO = Path(__file__).resolve().parents[1]
 KEYS = ('91', '160', '240', '365')
 SIMPLE = ('raytrace', 'cosmic_acc', 'cosmic_acc2', 'toy_aerogel', 'toy_scan', 'toy_prox',
           'plot_spectra', 'sketch', 'sketch_phase1')
+LEGACY_THC_MRAD = '63.6'   # fixed Xe Cherenkov angle of the legacy raytrace and cosmic_acc scripts [mrad]
 XE_INDEX = ('cosmic_acc2', 'toy_aerogel', 'toy_scan', 'toy_prox', 'plot_spectra', 'toy_plots', 'plot_lambda', 'plot_fcc')
+LEGACY_ARGS = {'raytrace': ('--thc-mrad', LEGACY_THC_MRAD), 'cosmic_acc': ('--thc-mrad', LEGACY_THC_MRAD), 'toy_prox': ('--legacy',)}
 NUM = re.compile(r'[-+]?(?:\d+\.\d*|\.\d+|\d+)(?:[eE][-+]?\d+)?')
 
 
@@ -31,7 +33,8 @@ def job_table(mode, out, nevt):
         cmd = lambda s, *a: [sys.executable, str(REPO / 'legacy' / f'{s}.py'), *a]
     else:
         cmd = lambda s, *a: [sys.executable, str(REPO / 'studies' / f'{s}.py'), '--outdir', str(out), *a,
-                             *(('--xe-index', 'bm1981') if s in XE_INDEX else ())]   # the legacy scripts use Bideau-Mehu 1981
+                             *(('--xe-index', 'bm1981') if s in XE_INDEX else ()),   # the legacy scripts use Bideau-Mehu 1981
+                             *LEGACY_ARGS.get(s, ())]
     jobs = {s: (cmd(s), ()) for s in SIMPLE}
     jobs['toy_plots'] = (cmd('toy_plots'), ('toy_aerogel',))
     if importlib.util.find_spec('pythia8mc') is not None:

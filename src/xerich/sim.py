@@ -3,7 +3,7 @@
 - aberration: exact-sphere imaging of a Cherenkov cone (spherical aberration).
 - ring_rate_full, ring_rate_partial: cosmic gas-ring rates with a flat-mirror footprint.
 - MirrorToy: 3D toy of the mirror setup with an aerogel tile under the sensor.
-- proximity: proximity-focusing aerogel toy.
+- proximity: proximity-focusing aerogel toy; proximity_fractions: its containment per muon at any Cherenkov angle.
 - track_segments, emit_photons, muon_photons, onaxis_muon: Cherenkov photons of one muon
   in a Phase1Layout, sampled in wavelength and traced with Fresnel optics and optional Rayleigh
   scattering in the tile (tracer.trace); window_cluster: the muon's own hit on the SiPM.
@@ -209,6 +209,30 @@ def proximity(aerogel, sensor, gap, n_gas, sampler, N=40000, ns=6, nphi=72, thma
     rate = flux_through_square(2*tile*1e-3, thmax)*3600
     fa = acc.mean((1, 2)); arc = acc.any(1).mean(1)
     return rate*np.mean(fa >= .8), rate*np.mean(arc >= .5)
+
+
+def proximity_fractions(aerogel, sensor, gap, n_gas, u, p0, th, ns=6, nphi=72):
+    """Per muon: fraction of the aerogel photons on the sensor and of the azimuths hit, in the geometry of proximity.
+
+    Muons (directions u, entry points p0 (N,3) on the tile top face z = 0) radiate at angle th in the tile, scalar or per
+    muon (0: no light). Returns (fa, arc).
+    """
+    N = len(u); th = np.broadcast_to(np.asarray(th, float), (N,))
+    p0 = np.array(p0, float); p0[:, 2] = 0.0
+    T = aerogel.thickness; tile = aerogel.half; sens = sensor.half
+    phi = np.linspace(0, 2*np.pi, nphi, endpoint=False); acc = np.zeros((N, ns, nphi), bool)
+    e1, e2 = tracer.basis(u)
+    d = (np.cos(th)[:, None, None]*u[:, None, :]+np.sin(th)[:, None, None]*(np.cos(phi)[None, :, None]*e1[:, None, :]
+                                                                          + np.sin(phi)[None, :, None]*e2[:, None, :]))
+    dg, okr = tracer.refract(d, UP, aerogel.n/n_gas)
+    for k, fr in enumerate((np.arange(ns)+0.5)/ns):
+        pe = p0+(fr*T/(-u[:, 2]))[:, None]*u
+        pb = tracer.to_plane(pe[:, None, :], d, -T, valid=d[..., 2] < 0)
+        okb = (np.abs(pb[..., 0]) < tile)&(np.abs(pb[..., 1]) < tile)&(np.abs(pe[:, None, 0]) < tile)&(np.abs(pe[:, None, 1]) < tile)
+        with np.errstate(divide='ignore', invalid='ignore'):
+            e = tracer.advance(pb, dg, -gap)
+        acc[:, k] = okb&okr&(d[..., 2] < 0)&(th[:, None] > 0)&(np.abs(e[..., 0]) < sens)&(np.abs(e[..., 1]) < sens)
+    return acc.mean((1, 2)), acc.any(1).mean(1)
 
 
 def _box_interval(p0, u, lo, hi, s_end):

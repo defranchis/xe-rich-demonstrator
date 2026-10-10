@@ -1,8 +1,8 @@
 """Cherenkov angle, threshold, Frank-Tamm photon yield and spectrum sampling, SiPM quantum efficiency."""
 import numpy as np
 
-from .constants import ALPHA, HBARC_EV_CM, HC, T_ROOM
-from .media import XE_INDEX_DEFAULT, n_xe
+from .constants import AEROGEL_N_AIR, ALPHA, HBARC_EV_CM, HC, T_ROOM
+from .media import XE_INDEX_DEFAULT, aerogel_index, aerogel_index_air, n_xe
 
 # ARC SiPM quantum efficiency vs photon energy [eV], ARC_SiPM_QuantumEfficiency of the ARC simulation:
 # k4geo e1ba7bc, FCCee/CLD/compact/CLD_o3_v01/materials_arc_o1_v01.xml:6
@@ -99,3 +99,33 @@ class PhotonSpectrum:
     def sample(self, rng, n):
         """n photon energies [eV] drawn from the spectrum."""
         return np.interp(rng.random(n)*self.cdf[-1], self.cdf, self.E)
+
+
+def ftqe_angle_yield(index, beta, weight=qe_arc, band=None, ngrid=4001):
+    """Mean Cherenkov angle [rad] and photon yield [1/mm] over the Frank-Tamm x weight spectrum, per velocity in beta.
+
+    index is n(lambda [nm]); band (E_lo, E_hi) [eV] defaults to qe_band(); weight(E) (default the ARC SiPM QE; None for
+    pure FT) multiplies the spectrum. Below threshold the angle and the yield are 0.
+    """
+    E_lo, E_hi = qe_band() if band is None else band
+    E = np.linspace(E_lo, E_hi, ngrid); n = index(HC/E)
+    b = np.atleast_1d(np.asarray(beta, float))[:, None]
+    ct = 1/(b*n[None, :]); w = np.where(ct < 1, ALPHA/HBARC_EV_CM*(1-ct**2), 0.0)
+    if weight is not None:
+        w = w*weight(E)[None, :]
+    th = np.arccos(np.minimum(ct, 1)); Y = np.trapezoid(w, E, axis=1)
+    with np.errstate(invalid='ignore', divide='ignore'):
+        mean = np.where(Y > 0, np.trapezoid(w*th, E, axis=1)/Y, 0.0)
+    return mean, Y/10
+
+
+def theta_xe(P_bar, beta=1.0, T=T_ROOM, model=XE_INDEX_DEFAULT):
+    """FT x QE-weighted mean Cherenkov angle [rad] in Xe at P_bar [bar] over the ARC SiPM QE band (264-954 nm)."""
+    return float(ftqe_angle_yield(lambda lam: n_xe(lam, P_bar, T, model), beta)[0][0])
+
+
+def pore_signal(P_bar, lam=400.0, n_tile=AEROGEL_N_AIR, T=T_ROOM, model=XE_INDEX_DEFAULT):
+    """beta = 1 aerogel-angle shift [rad] from Xe at P_bar in the pores, relative to the tile index n_tile, at lam [nm]:
+    (shift relative to air, media.aerogel_index_air; shift relative to vacuum, media.aerogel_index)."""
+    ng = n_xe(lam, P_bar, T, model); t0 = theta_c(n_tile)
+    return float(theta_c(aerogel_index_air(ng, n_tile))-t0), float(theta_c(aerogel_index(ng, n_tile))-t0)

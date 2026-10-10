@@ -19,7 +19,8 @@ REPO = Path(__file__).resolve().parents[1]
 
 def test_raytrace_stdout_identical(tmp_path):
     old = subprocess.run([sys.executable, str(REPO/'legacy'/'raytrace.py')], cwd=tmp_path, capture_output=True, text=True, check=True)
-    new = subprocess.run([sys.executable, str(REPO/'studies'/'raytrace.py')], cwd=tmp_path, capture_output=True, text=True, check=True)
+    new = subprocess.run([sys.executable, str(REPO/'studies'/'raytrace.py'), *regression.LEGACY_ARGS['raytrace']], cwd=tmp_path,
+                         capture_output=True, text=True, check=True)
     assert old.stdout == new.stdout
 
 

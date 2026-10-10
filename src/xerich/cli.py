@@ -3,6 +3,7 @@ import argparse
 import os
 from pathlib import Path
 
+from .cherenkov import theta_xe
 from .media import XE_INDEX_DEFAULT, XE_INDEX_MODELS
 
 
@@ -32,3 +33,15 @@ def outdir(args):
     d = args.outdir if args.outdir is not None else default_outdir()
     d.mkdir(parents=True, exist_ok=True)
     return d
+
+
+def thc(p):
+    """Add the --thc-mrad option (fixed gas Cherenkov angle in place of the Xe index model) to the parser p."""
+    p.add_argument('--thc-mrad', type=float, default=None,
+                   help='fixed Xe Cherenkov angle [mrad]; default: FT x QE-weighted mean over the ARC SiPM QE band from --xe-index')
+    return p
+
+
+def thc_value(args, P_bar):
+    """Gas Cherenkov angle [rad] for beta = 1 at P_bar [bar]: --thc-mrad if given, else cherenkov.theta_xe with --xe-index."""
+    return args.thc_mrad/1e3 if args.thc_mrad is not None else theta_xe(P_bar, model=args.xe_index)

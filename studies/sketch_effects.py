@@ -29,9 +29,9 @@ from matplotlib.patches import Rectangle  # noqa: E402
 
 from xerich import cli, sim, tracer  # noqa: E402
 from xerich.analysis import SCATTER_LAM_EDGES, scattered_fraction  # noqa: E402
-from xerich.cherenkov import PhotonSpectrum, qe_arc, qe_band  # noqa: E402
+from xerich.cherenkov import PhotonSpectrum, qe_arc, qe_band, theta_xe  # noqa: E402
 from xerich.constants import (AEROGEL_N_AIR, HC, MIP_DIRECT_PE, MIRROR_D, MIRROR_R, SENSOR_HALF_2IN, T0,  # noqa: E402
-                              THC_GAS_3BAR, T_ROOM, WINDOW_N, WINDOW_T)
+                              T_ROOM, WINDOW_N, WINDOW_T)
 from xerich.layout import Aerogel, Mirror, Phase1Layout, Sensor, Window  # noqa: E402
 from xerich.media import ConstantIndex, Rayleigh, c4f10, xenon  # noqa: E402
 from xerich.plotting import AEROGEL, GAS, INK, LIGHT, MIRROR, MUTED, RADIATOR, plt, save  # noqa: E402
@@ -1048,9 +1048,9 @@ def fig_aberration(out, ctx):
     cx.legend(loc='upper right', fontsize=8); cx.grid(alpha=.3)
     cx.set_title('(c) reconstructed Cherenkov angle (mirror unbounded)', loc='left')
     # (d) numbers
-    legacy = {}
+    legacy = {}; th_rt = theta_xe(3.0)
     for h0 in ABERR_LEGACY_OFFSETS:
-        t_, _ = sim.aberration(h0, 0.0, np.random.default_rng(1), Mirror(MIRROR_R), TRACK_LEN, THC_GAS_3BAR, n=N_ABERR)   # same seed value and angle as raytrace.py, for comparison
+        t_, _ = sim.aberration(h0, 0.0, np.random.default_rng(1), Mirror(MIRROR_R), TRACK_LEN, th_rt, n=N_ABERR)   # same seed value and angle as raytrace.py, for comparison
         legacy[h0] = t_.std()
     tx = fig.add_axes([0.735, 0.08, 0.26, 0.85]); tx.axis('off')
     lines = ['Track parallel to the axis at offset x, vertical,', 'β = 1, θ = %.1f mrad (%.0f nm), photons uniform over' % (1e3*th, LAM0),
@@ -1059,7 +1059,7 @@ def fig_aberration(out, ctx):
     for h0 in offs:
         st = stats[h0]
         lines.append('  %3.0f   %4.1f–%4.1f     %5.2f      %5.1f %%' % (h0, *st['rho'], 1e3*st['rms'], 100*st['frac_real']))
-    lines += ['', 'sim.aberration (fixed angle %.1f mrad, seed 1):' % (1e3*THC_GAS_3BAR)] + \
+    lines += ['', 'sim.aberration (FT x QE angle %.1f mrad, seed 1):' % (1e3*th_rt)] + \
         ['  x = %2.0f mm: rms %.2f mrad' % (h0, 1e3*v) for h0, v in legacy.items()] + \
         ['', 'For the vertical on-axis muon of the hit-map', 'study the mirror zone is ρ < %.1f mm and the' % stats[0.0]['rho'][1],
          'effect is a radius shift of %.1f µm (Fig. 2c)' % (1e3*ctx['tile_mc']['ftqe']['sph']), 'and an angle rms of %.3f mrad.' % (1e3*stats[0.0]['rms']), '',

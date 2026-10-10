@@ -18,15 +18,20 @@ HBARC_EV_CM = 1.97326980e-5  # hbar c [eV cm]
 M_PI = 0.13957
 M_K = 0.493677
 M_P = 0.938272
+M_MU = 0.10565839         # muon mass (PDG muon tables)
 
 # Cosmic muons
 COSMIC_I0 = 70.0                 # vertical intensity [m^-2 s^-1 sr^-1], cos^2 zenith law
 MUON_THMAX = np.radians(75)      # zenith cut of the 3D toys [rad]
+COSMIC_I0_PMIN = 1.0             # momentum above which COSMIC_I0 counts the vertical muons [GeV/c]
 
 # f = 203 mm mirror of configurations 1 and 5 (Edmund #43-584)
 MIRROR_R = 406.4             # radius of curvature [mm]
 MIRROR_D = 76.2              # diameter [mm]
 MIRROR_CLEAR_FRAC = 0.9      # clear aperture diameter / mirror diameter
+
+# f/1 short-focal-length mirrors of configurations 2 and 3: Edmund stock number -> (focal length, diameter) [mm]
+MIRROR_SHORT_F = {'43-543': (50.8, 50.8), '43-553': (76.2, 76.2)}
 
 # SiPM
 SENSOR_HALF_2IN = 25.4       # half side of the 2" x 2" active area [mm]
@@ -52,7 +57,6 @@ WINDOW_T = 0.3               # thickness [mm]
 MIP_DIRECT_PE = 1.0          # fired cells from the muon crossing the silicon (one microcell at normal incidence)
 
 # Fixed values used in place of computed ones
-THC_GAS_3BAR = 0.0636        # Xe Cherenkov angle, 3 bar, 320-450 nm, beta = 1 [rad] (Bideau-Mehu 1981 index; kept for the legacy regression)
 THETA_AERO_GAS = 0.249       # aerogel Cherenkov angle taken as the ring angle in the gas [rad]
 AERO_YIELD_PER_CM = 24.7     # emitted aerogel photons per cm, 320-450 nm
 GAS_YIELD_REF = 33.5         # emitted Xe photons over GAS_YIELD_REF_LEN, 3 bar, 320-450 nm
