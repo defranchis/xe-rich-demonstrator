@@ -25,7 +25,7 @@ NOTES_GAS_ONLY = ('Key numbers (3 bar Xe, vertical μ)\n'
 
 
 def draw(aerogel=True):
-    """Sketch with (aerogel=True) or without (gas-only phase 1) the aerogel tile; returns the figure."""
+    """Sketch with (aerogel=True) or without (configuration 1, Xe gas ring) the aerogel tile; returns the figure."""
     R = MIRROR_R; f = R/2; a = MIRROR_D/2
     thc = THC_GAS_3BAR_400; tha = THETA_AERO_GAS
     hs = SENSOR_HALF_PROTO
@@ -82,6 +82,7 @@ def draw(aerogel=True):
         ax.annotate('', xy=(-52, 0), xytext=(-52, z_aer0), arrowprops=dict(arrowstyle='<->', color=MUT, lw=.8))
         ax.text(-50, 140, '~19 cm gas', rotation=90, va='center', fontsize=8, color=MUT)
     ax.set_xlim(-155, 175); ax.set_ylim(-55, 280); ax.set_aspect('equal'); ax.axis('off')
+    # title and notes as in legacy/sketch_phase1.py, so the regression check still reports identical PNG bytes
     ax.set_title('Side view (to scale, mm)' if aerogel else 'Phase 1, gas-only ring imaging: side view (to scale, mm)',
                  fontsize=11, color=INK, loc='left')
 

@@ -23,7 +23,7 @@ M_P = 0.938272
 COSMIC_I0 = 70.0                 # vertical intensity [m^-2 s^-1 sr^-1], cos^2 zenith law
 MUON_THMAX = np.radians(75)      # zenith cut of the 3D toys [rad]
 
-# Phase-1 mirror (Edmund #43-584)
+# f = 203 mm mirror of configurations 1 and 5 (Edmund #43-584)
 MIRROR_R = 406.4             # radius of curvature [mm]
 MIRROR_D = 76.2              # diameter [mm]
 MIRROR_CLEAR_FRAC = 0.9      # clear aperture diameter / mirror diameter

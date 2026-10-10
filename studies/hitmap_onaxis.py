@@ -1,4 +1,4 @@
-"""Mean SiPM hit density for a vertical muon on the mirror axis, phase-1 layout with the aerogel tile.
+"""Mean SiPM hit density for a vertical muon on the mirror axis in configuration 5 (f = 203 mm mirror with the tile).
 
 Gases Xe 2 bar, Xe 3 bar (20 degC) and C4F10 1 bar fill the vessel; aerogel n = 1.03 (constant by default),
 with Rayleigh scattering. Photons are sampled from the Frank-Tamm spectrum over the band where the ARC SiPM QE
@@ -190,7 +190,7 @@ def case_figure(out, name, label, wn, maps, radial, s, rpar, lay):
                else 'no scattering or absorption;') + ' SiPM = perfect absorber;',
               'polarised Fresnel at the tile faces. Maps in %.1f mm bins.' % MAP_BIN]
     a.text(0.0, 1.0, '\n'.join(lines), va='top', ha='left', fontsize=9, color=INK, transform=a.transAxes, family='DejaVu Sans')
-    fig.suptitle('Phase-1 SiPM hit density, %s, %s' % (label, WLABEL[wn]), fontsize=12, color=INK)
+    fig.suptitle('SiPM hit density, %s, %s' % (label, WLABEL[wn]), fontsize=12, color=INK)
     plt.tight_layout(rect=(0, 0, 1, 0.97))
     p = save(out, 'hitmap_onaxis_%s_%s.png' % (name, wn), dpi=130, fig=fig); plt.close(fig)
     return p

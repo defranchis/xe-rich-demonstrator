@@ -1,4 +1,4 @@
-"""To-scale sketch of the phase-1 gas-only demonstrator (arc_xe_demonstrator_phase1_gas_only.png)."""
+"""To-scale sketch of configuration 1, the Xe gas ring without aerogel (arc_xe_demonstrator_phase1_gas_only.png)."""
 from xerich import cli
 from xerich.plotting import save
 from xerich.sketch import draw

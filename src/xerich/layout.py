@@ -68,7 +68,7 @@ class Radiator:
 
 @dataclass(frozen=True)
 class Phase1Layout:
-    """Phase-1 mirror setup along the axis, z up from the mirror vertex (lengths in mm).
+    """Mirror setup of configurations 1 and 5 along the axis (tile optional), z up from the mirror vertex (lengths in mm).
 
     Spherical mirror (vertex at z = 0, centre at z = R), gas, aerogel tile (None: no tile) of
     half side tile.half between z_tile_bottom and z_tile_top, a gas gap, and the sensor plane at

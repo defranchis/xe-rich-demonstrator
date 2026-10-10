@@ -1,6 +1,6 @@
-"""Sketches of the optical effects in the phase-1 layout, drawn from rays computed with the xerich tracer.
+"""Sketches of the optical effects in configuration 5 (f = 203 mm mirror with the tile), from rays traced with xerich.
 
-Phase-1 layout (xerich.layout.Phase1Layout with the xerich.constants values): spherical mirror, flat SiPM at the
+Layout (xerich.layout.Phase1Layout with the xerich.constants values): spherical mirror, flat SiPM at the
 focal plane, gas gap, aerogel tile, Xe 3 bar unless stated; vertical beta = 1 muon on the mirror axis entering at the
 sensor plane. Rays are followed branch by branch with the tracer's own geometry and Fresnel calls (follow();
 terminal points and weights are checked against tracer.trace in several scenes, and a mismatch raises), and the
@@ -1649,7 +1649,7 @@ def main():
     p.add_argument('--only', type=int, nargs='*', default=None, help='figure numbers to draw (default all)')
     args = p.parse_args(); out = cli.outdir(args)
     ctx = {'lay': layout(GASES['xe3']), 'seed': args.seed}
-    say('sketch_effects: phase-1 layout, %s unless stated, %d worker processes' % (ctx['lay'].gas.label, args.nproc))
+    say('sketch_effects: f = %.0f mm layout, %s unless stated, %d worker processes' % (ctx['lay'].mirror.f, ctx['lay'].gas.label, args.nproc))
     nchunk = int(np.ceil(args.nphot/args.chunk))
     t0 = time.time()
     ctx['mc'] = run_mc(tuple((k, g, None) for k, g in GASES.items()) + (('xe3_ray', GASES['xe3'], Rayleigh()),),

@@ -1,4 +1,4 @@
-"""Optics tables, photon spectra and the phase-1 on-axis muon tracer (xerich.media, cherenkov, layout, sim)."""
+"""Optics tables, photon spectra and the on-axis muon tracer (xerich.media, cherenkov, layout, sim)."""
 import os
 import re
 from pathlib import Path
