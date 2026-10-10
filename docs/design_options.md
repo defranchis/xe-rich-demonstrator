@@ -2,7 +2,7 @@
 
 This summarises the design exploration for a lab demonstrator of pressurised xenon as the ARC gas radiator. The study drivers in `studies/` produce every number quoted here, and the plots are on the [design-figures page](https://mdefranc.web.cern.ch/ARC/xe_demonstrator/design_figures/). Assumptions and simplifications are listed in the [README](../README.md).
 
-**Status in one paragraph.** Phase 1 is gas-only ring imaging with cosmic muons. It uses a stock 3" spherical mirror with f ≈ 203 mm, a 2" × 2" SiPM plane at its focus and ~20 cm of Xe at 2–3 bar. The aerogel cannot be imaged in this geometry. It moves to a separate proximity-focusing configuration (phase 2), which also measures how Xe in the pores shifts the aerogel index. A full-size, ARC-like cell needs a custom mirror and is left for later.
+**Status in one paragraph.** The plan has five configurations (§7). (1) Gas-ring imaging with cosmic muons: a stock 3" spherical mirror with f ≈ 203 mm, a 2" × 2" SiPM plane at its focus and ~20 cm of Xe at 2–3 bar. (2, 3) The aerogel ring imaged with a short-focal-length mirror, in air and in Xe, which measures how Xe in the pores shifts the aerogel index. (4) The same comparison by proximity focusing, without a mirror, in air and in Xe. (5) The full demonstrator: configuration 1 with the 1 cm aerogel tile 1 mm in front of the SiPM; the aerogel ring is not imaged in this geometry (for near-vertical muons its light misses the mirror, §6.1), and the tile Rayleigh-scatters about a fifth of the gas-ring photons (§6.3). A full-size, ARC-like cell needs a custom mirror and is left for later.
 
 ---
 
@@ -66,7 +66,7 @@ Signal processes only, with |cosθ| < 0.9:
 | Coating | Verdict |
 |---|---|
 | **Al + MgF₂** | The standard RICH coating. R > 80–85 % down to ~160 nm. Needed only if VUV-sensitive photodetectors are used. |
-| **Protected / UV-enhanced Al (Al + SiO₂)** | Fine above ~250 nm, cheap, broadband, insensitive to angle of incidence. **The choice for phase 1.** |
+| **Protected / UV-enhanced Al (Al + SiO₂)** | Fine above ~250 nm, cheap, broadband, insensitive to angle of incidence. **The choice for the stock mirrors (configurations 1, 2, 3 and 5).** |
 | Broadband dielectric | Sharp band edges act as a wavelength filter. But the band shifts with angle of incidence: the Edmund "320–450 nm" spec holds at 45°, and at 0° it becomes 340–488 nm. Reflectance is also polarisation-dependent. Usable, but not needed. |
 | Silver, gold | Unsuitable: reflectivity collapses below ~350–400 nm. |
 | Bare Al | Unsuitable: the native oxide degrades reflectivity below ~200 nm and over time. |
@@ -90,7 +90,7 @@ At f ≈ 20 cm, only the central ~8 cm of a large (f/1) mirror is good for preci
 ### 2.4 Commercial mirrors considered (f ≈ 20 cm unless stated)
 | Part | Diameter | f | Coating | Price | Comment |
 |---|---|---|---|---|---|
-| **Edmund #43-584** | **76.2 mm (3")** | **203.2 mm** (f/2.7) | Enhanced Al, Ravg > 89 % at 250–450 nm | **€316** | **Recommended for phase 1.** Largest stock mirror at f ≈ 20 cm. |
+| **Edmund #43-584** | **76.2 mm (3")** | **203.2 mm** (f/2.7) | Enhanced Al, Ravg > 89 % at 250–450 nm | **€316** | **Recommended for configurations 1 and 5.** Largest stock mirror at f ≈ 20 cm. |
 | Thorlabs CM750-200-F01 | 75 mm | 200 mm | UV-enhanced Al, R > 90 % at 250–450 nm, N-BK7 | quote | Equivalent alternative; f is exactly 200 mm. |
 | Edmund #49-608 | 50.8 mm (2") | 203.2 mm (f/4) | Enhanced Al, Ravg > 89 % at 250–450 nm | $199 | OK for centred beam tracks only. |
 | Edmund #49-606 | 25.4 mm (1") | 203.2 mm (f/8) | Enhanced Al | $135 | Too small: the ring fills the mirror at 3 bar. |
@@ -149,9 +149,9 @@ Notes:
 
 ---
 
-## 5. Cosmic-ray acceptance, phase 1 (gas ring)
+## 5. Cosmic-ray acceptance, configurations 1 and 5 (gas ring)
 Assumptions:
-- Vertical intensity I0 ≈ 70 m⁻²s⁻¹sr⁻¹ with a cos²θ distribution.
+- Vertical intensity I0 ≈ 70 m⁻²s⁻¹sr⁻¹ (muons above 1 GeV) with a cos²θ distribution.
 - About 1000 muons per hour cross the 5 × 5 cm plane.
 - Most cosmic muons are above the μ threshold (~1.6 GeV at 3 bar), so their rings are nearly saturated.
 
@@ -170,8 +170,8 @@ Assumptions:
 ---
 
 ## 6. Aerogel
-### 6.1 In the mirror geometry: not imaged (`toy_aerogel.py`, `toy_scan.py`)
-- In the gas, θ_aero ≈ 249 mrad (n ≈ 1.032 with Xe in the pores).
+### 6.1 With the f = 203 mm mirror (configuration 5): not imaged (`toy_aerogel.py`, `toy_scan.py`)
+- θ_aero = 242 mrad inside the tile for n = 1.03 (249 mrad in the gas, the value used for the distances below); the toys of this section add the Xe pore shift (n ≈ 1.032 at 3 bar, 250 mrad in the tile).
 - After ~19 cm of gas the photons are ~48 mm from the track, which **misses the 3" mirror**. The imaged ring would have **r ≈ 52 mm**, which **misses the 5 cm SiPM**.
 - With a 3" mirror and a 5.1 cm SiPM, only muons at 6–22° put aerogel light on the sensor:
   - ≤ ~3.5 emitted photons per muon (~1 detected);
@@ -192,8 +192,8 @@ Scan with muons uniform over the 5 × 5 cm tile (~985 /h):
 - Even then the rings are mostly partial, and a full ring carries only ~25 emitted photons in 320–450 nm (~6 detected).
 - A statistical measurement from the arcs would need external tracking of the muon direction at the mrad level.
 
-### 6.2 Proximity focusing: recommended for phase 2 (`toy_prox.py`)
-The layout is aerogel tile → Xe gap → SiPM, with no mirror.
+### 6.2 Proximity focusing: configuration 4 (`toy_prox.py`)
+The layout is aerogel tile → gas gap (air or Xe) → SiPM, with no mirror. The table is for Xe at 3 bar.
 
 | Xe gap | Ring radius | ≥ 80 % of the ring on the 5.1 cm SiPM /h | ≥ 50 % arc /h |
 |---|---|---|---|
@@ -212,28 +212,34 @@ The aerogel threshold for muons is ~0.43 GeV, so nearly every triggered muon rad
 - This is a **lower bound**: Xe adsorbed on the large internal surface (500–1000 m²/g) could add to it. Pore filling may also cause a transient of minutes to hours.
 - No published measurement in pressurised Xe was found.
 - **Precedent:** the LHCb RICH1 aerogel in contact with C₄F₁₀ had ~1.8× worse Cherenkov-angle resolution than simulated, attributed at least partly to absorbed C₄F₁₀. The aerogel was isolated from the gas for 2012 running (arXiv:1211.6759). This is relevant to ARC, where the aerogel sits in the gas.
-- Proposed measurement: the aerogel θc in vacuum, air, and Xe at 1/2/3 bar, plus its time dependence after each pressure change.
-- In the gas-imaging configuration, 1 cm of aerogel in front of the SiPM Rayleigh-scatters 28 % of the gas photons at 350 nm and 18 % at 400 nm, 21 % of the FT×QE photons over the SiPM band, for the clarity of the ARC simulation (C = 0.005 µm⁴/cm; `doc_values.py`, `hitmap_onaxis.py`). That depends on the tile clarity, and it is one reason phase 1 runs without aerogel.
+- Proposed measurement (configurations 2–4): the aerogel θc in air and in Xe at 1/2/3 bar (vacuum as an optional extra point), plus its time dependence after each pressure change.
+- In configuration 5, the 1 cm tile 1 mm in front of the SiPM Rayleigh-scatters 28 % of the gas photons at 350 nm and 18 % at 400 nm, 21 % of the FT×QE photons over the SiPM band, for the clarity of the ARC simulation (C = 0.005 µm⁴/cm; `doc_values.py`, `hitmap_onaxis.py`). That depends on the tile clarity.
 
 ---
 
-## 7. Recommendations
-1. **Phase 1 (now):**
+## 7. Plan
+Five configurations, in an order still to be decided (§8). Configurations 1 and 5 share the f = 203 mm mirror (`Phase1Layout` without and with the tile), 2 and 3 share a short-focal-length mirror, and 4 needs no mirror.
+1. **Xe gas ring:**
    - Mirror: Edmund #43-584 (or Thorlabs CM750-200-F01). Buy a spare.
    - SiPM: the 2" × 2" plane at the focal plane.
    - Radiator: ~20 cm of Xe at 2 and 3 bar, no aerogel.
    - Trigger: the matched scintillator telescope from §5.
-   - Expect ~300–450 usable rings per day.
-2. **Phase 2:** an aerogel-in-Xe proximity-focusing run with a 3–5 cm gap, using the same SiPM.
-3. **Later:** an ARC-like cell with an ~26 cm hexagonal mirror (R ≈ 37 cm, custom or from ARC), an 8 × 8 cm SiPM tile and beam tests.
-   - Only this configuration images gas and aerogel together, and even there the aerogel ring is partial for most tracks.
+   - Expect ~300–450 usable rings per day (an upper limit, §8).
+2. **Aerogel ring in air:** the 1 cm aerogel tile 1 mm in front of the SiPM, air at atmospheric pressure, and a short-focal-length mirror (Edmund #43-543, 2", f = 50.8 mm, or #43-553, 3", f = 76.2 mm; to be traced). It measures the aerogel index, dispersion and clarity with air in the pores, the condition in which the vendor quotes n.
+3. **Aerogel ring in Xe:** configuration 2 with Xe at 1–3 bar and the same mirror. Relative to 2, it measures the shift of the aerogel angle from Xe in the pores and its time dependence after each pressure change.
+4. **Proximity focusing in air and in Xe:** the tile with a 3–5 cm gap to the same SiPM and no mirror (§6.2). It makes the same air–Xe comparison without mirror systematics and needs a mechanically stable gap.
+5. **Full demonstrator:** configuration 1 with the 1 cm aerogel tile 1 mm in front of the SiPM. Its light misses the mirror for near-vertical muons (§6.1), and it Rayleigh-scatters about a fifth of the gas-ring photons (§6.3).
+6. **Later:** an ARC-like cell with an ~26 cm hexagonal mirror (R ≈ 37 cm, custom or from ARC), an 8 × 8 cm SiPM tile and beam tests.
+   - It images the gas and aerogel rings together at ARC scale; even there the aerogel ring is partial for most tracks.
    - Alternative if the goal is purely Xe characterisation with maximum photon statistics: the 6" f = 610 mm mirror (#43-970) with a ~65 cm vessel. That needs ~3× the Xe and a larger sensor.
 
 ## 8. Open items
 - SiPM pixel size and part number. This drives the resolution and acceptance numbers.
-- Phase-2 mechanical design: gap, tile holder, trigger.
+- Order of the five configurations (§7).
+- Mechanical design of configurations 2–4: tile holder, gap, trigger.
 - Fold in the measured mirror reflectivity, SiPM PDE and aerogel transmission. Add photon statistics to the toys.
 - Xe virial coefficient and UV dispersion: checked (§1.2).
+- The cosmic gas-ring rates (§5, §6.1, §7) take β = 1 for every muon counted in I0 (muons above 1 GeV); muons below the Xe threshold give no ring and those just above it give smaller rings, so the rates are upper limits.
 - Compare against the ARC full simulation (`ARC_Simulation_Reconstruction`), with Xe properties tuned.
 
 ## Sources
@@ -241,9 +247,11 @@ The aerogel threshold for muons is ~0.43 GeV, so nearly every triggered muon rad
   - [Börzsönyi et al., Appl. Opt. 47, 4856 (2008)](https://doi.org/10.1364/AO.47.004856); coefficients as on [refractiveindex.info, Börzsönyi](https://refractiveindex.info/?shelf=main&book=Xe&page=Borzsonyi), which corrects a typo of the paper (C₁ = 12.75 × 10⁻³ µm²)
   - [refractiveindex.info, Bideau-Mehu et al. 1981](https://refractiveindex.info/?shelf=main&book=Xe&page=Bideau-Mehu)
   - [Leonard, At. Data Nucl. Data Tables 14, 21 (1974)](https://doi.org/10.1016/S0092-640X%2874%2980028-8), Table II(e): Koch's data (Kgl. Fysiogr. Sällsk. Lund Förh. 19, 173 (1949)) at 273.16 K and 1 atm, wavelengths in air
+- Cosmic muons: [PDG Review of Particle Physics (2022), Cosmic rays](https://pdg.lbl.gov/2022/reviews/rpp2022-rev-cosmic-rays.pdf)
 - Xe density: [NIST Chemistry WebBook, fluid properties of xenon](https://webbook.nist.gov/cgi/fluid.cgi?ID=C7440633&Action=Page)
 - Mirrors:
   - [Edmund #43-584](https://www.edmundoptics.com/p/3quot-dia-8quot-fl-uv-enhanced-alum-spherical-mirror/5147/)
+  - [Edmund #43-543](https://www.edmundoptics.eu/p/2quot-dia-2quot-fl-uv-enhanced-alum-spherical-mirror/5106/) and [#43-553](https://www.edmundoptics.eu/p/3quot-dia-3quot-fl-uv-enhanced-alum-spherical-mirror/5116/) (short focal length)
   - [Edmund #49-608](https://www.edmundoptics.com/p/2quot-dia-8quot-fl-uv-enhanced-alum-spherical-mirror/10121/)
   - [Edmund #49-606](https://www.edmundoptics.com/p/1quot-dia-8quot-fl-uv-enhanced-alum-spherical-mirror/10119/)
   - [Edmund #72-960](https://www.edmundoptics.com/p/1-dia-1-fl-320-450nm-spherical-mirror/55204/)
