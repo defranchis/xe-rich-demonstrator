@@ -20,7 +20,7 @@ from xerich.media import ConstantIndex, xenon  # noqa: E402
 from xerich.plotting import INK, MUTED, plt, save  # noqa: E402
 
 THICKNESS = np.round(np.arange(0.1, 0.501, 0.05), 3)   # window thickness grid [mm]
-INDICES = (1.45, WINDOW_N, 1.55)
+INDICES = (1.45, 1.5, WINDOW_N)
 _CFG = {}
 
 
@@ -60,7 +60,7 @@ def main():
         print(' %.2f  %.2f    %6.2f  %6.2f   %6.2f              %.3f     %.3f  %.3f       %.3f-%.3f' % r)
 
     fig, ax = plt.subplots(1, 2, figsize=(12.5, 4.8))
-    styles = {1.45: ':', WINDOW_N: '-', 1.55: '--'}
+    styles = {1.45: ':', 1.5: '--', WINDOW_N: '-'}
     R = np.array(rows)
     for n_w in INDICES:
         m = R[:, 0] == n_w

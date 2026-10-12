@@ -51,9 +51,9 @@ AEROGEL_POLE_NM = 83.22      # single-pole aerogel dispersion lambda_0 [nm] (Bel
 RAYLEIGH_C_AEROGEL = 0.005   # aerogel clarity C in Lambda = lambda^4/C [um^4/cm] (k4geo RAYLEIGH__Aerogel_BelleII)
 AEROGEL_SURFACE_A = 1.0      # aerogel surface factor A in T = A exp(-C t/lambda^4) (k4geo applies none)
 
-# SiPM protective window (part unknown) and the muon's direct hit
-WINDOW_N = 1.5               # refractive index
-WINDOW_T = 0.3               # thickness [mm]
+# SiPM protective window and the muon's direct hit
+WINDOW_N = 1.55              # refractive index: S13361 datasheet epoxy value, to be confirmed for the board's arrays
+WINDOW_T = 0.1               # thickness [mm]: S13361 datasheet value (0.05-0.15 mm band), to be confirmed for the board's arrays
 MIP_DIRECT_PE = 1.0          # fired cells from the muon crossing the silicon (one microcell at normal incidence)
 
 # Fixed values used in place of computed ones

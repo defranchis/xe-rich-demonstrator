@@ -142,6 +142,16 @@ def test_track_segments_with_window():
     assert len(lay.scene().slabs) == 2 and len(phase1(xenon(3)).scene().slabs) == 1
 
 
+def test_window_cluster_defaults():
+    """Default window (n = 1.55, t = 0.1 mm): about 2.8 FT x QE photons (3.8 with the direct hit)."""
+    lay = phase1(xenon(3)); lo, hi = qe_band(); win = Window()
+    ph, e = sim.window_cluster(lay, np.random.default_rng(7), PhotonSpectrum(win.medium.index, lo, hi), 20000, win)
+    n = sim.cluster_stats(ph, e, weight=lambda lam: qe_arc(HC/lam))['n']
+    # +-0.05 (2 %); the sampling spread of 20000 photons is 0.01
+    assert (win.n, win.thickness) == (1.55, 0.1)
+    assert n == pytest.approx(2.79, abs=0.05)
+
+
 @pytest.mark.parametrize('n_w,t', [(1.5, 0.3), (1.45, 0.1), (1.55, 0.5)])
 def test_window_cluster(n_w, t):
     """Window light is totally reflected at its bottom face and lands at (2t - d) tan(theta_c), d = depth below the silicon."""

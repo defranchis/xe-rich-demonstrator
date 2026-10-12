@@ -1,7 +1,7 @@
 """Proximity focusing of the aerogel ring (configuration 4 of docs/design_options.md) with the 3D tracer.
 
 The 1 cm aerogel tile (5 x 5 cm, constant n = 1.03, Rayleigh scattering) and, after a gap g = 30 / 50 / 70 mm from its
-exit face to the silicon, the 2" x 2" SiPM plane facing the tile, covered by its protective window (n = 1.5, 0.3 mm;
+exit face to the silicon, the 2" x 2" SiPM plane facing the tile, covered by its protective window (constants.WINDOW_N, WINDOW_T;
 the window lies inside g). No mirror. Air at 1 atm or Xe at 1, 2, 3 bar fills the gap and the pores. The tile index
 is run with the pore-gas shift off and with both shift conventions: 'vac' = 1.03 + 0.97 (n_gas - 1) (media.aerogel_index)
 and 'air' = 1.03 + 0.935 (n_gas - n_air) (media.aerogel_index_air), with n_gas(lambda). A beta = 1 muon crosses tile, gap,
