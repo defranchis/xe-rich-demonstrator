@@ -158,16 +158,16 @@ Assumptions (`cosmic_spectrum.py`, `cosmic_rates.py`):
 - Trigger telescope, idealised: 5 × 5 cm at the SiPM plane and 8 × 8 cm at the mirror vertex plane, 105 muons per hour (88 for β = 1 muons with cos²θ and I0 = 70 above 1 GeV/c). Real counters sit above the SiPM and below the mirror, which lowers the rates (§8). The threshold at the UV edge of the QE band (264 nm) is 2.75 / 1.94 / 1.58 GeV/c at 1 / 2 / 3 bar; 41 / 53 / 59 % of the telescope muons are above it.
 - A ≥ 80 % ring has ≥ 80 % of its sampled photons on the mirror and ≥ 80 % of the ring on the SiPM; a full ring has ≥ 99 % on both. FT×QE photons are Frank–Tamm photons weighted by the SiPM quantum efficiency (the QE table of the ARC simulation, a placeholder until the SiPM is chosen; no window), without Rayleigh-scattered photons. The tracer estimates them per muon from its sampled photons, so cuts such as "≥ 10 photons" are approximate for rings whose count is near the cut.
 
-3D tracer, 3" mirror (f = 203 mm), 2" SiPM, through the telescope (5 seeds, seed spread 0.2–0.4 per hour):
+3D tracer, 3" mirror (f = 203 mm), 2" SiPM, through the telescope (5 seeds, seed spread 0.2–0.3 per hour):
 
 | | 1 bar | 2 bar | 3 bar |
 |---|---|---|---|
-| ≥ 80 % rings per hour | 9.5 | 10.0 | 9.2 |
-| full rings per hour | 7.6 | 6.9 | 5.6 |
-| ≥ 80 % rings per hour with ≥ 10 FT×QE photons | 3.8 | 7.4 | 7.7 |
-| FT×QE photons per ≥ 80 % ring | 7.9 | 16.0 | 24.2 |
+| ≥ 80 % rings per hour | 9.4 | 9.9 | 9.1 |
+| full rings per hour | 7.6 | 6.8 | 5.6 |
+| ≥ 80 % rings per hour with ≥ 10 FT×QE photons | 3.7 | 7.3 | 7.6 |
+| FT×QE photons per ≥ 80 % ring | 7.9 | 15.9 | 24.1 |
 
-- Reyna and Shukla–Sankrith change the ≥ 80 % rates by +14 to +17 % and −5 to −10 %; β = 1 muons (cos²θ, I0 = 70) give 17.2 / 13.2 / 10.4 per hour.
+- Reyna and Shukla–Sankrith change the ≥ 80 % rates by +14 to +17 % and −5 to −10 %; β = 1 muons (cos²θ, I0 = 70) give 17.0 / 13.0 / 10.1 per hour.
 - **The SiPM limits the angular acceptance.** Full rings need |θ_μ| ≲ 3.6° for a 5 cm sensor (atan((half sensor − ring radius)/f) at 400 nm, 3 bar).
 - **The mirror limits the position acceptance:** about ±2.1 cm for a 3" mirror without the tile and ±2.2 cm with it (clear radius − L·tanθc).
 
@@ -180,7 +180,7 @@ Mirror and SiPM size (`cosmic_spectrum.py`; muons up to 25° from vertical over 
 | 3" | 4 cm | 5.0 | 6.2 | 8.3 | 8.0 | 3.7 |
 | 3" | 8 cm | 53.7 | 46.0 | 65.4 | 47.4 | 28.9 |
 
-- The β = 1 mirror scan of `cosmic_acc.py` (3 bar, 8 cm sensor, L = 200 mm; rings entirely on the sensor with all / ≥ 80 % of the photons on the mirror, per hour): 2" 4/14, 3" 24/41, 4" 54/87, 6" 160/200, 20 cm 315/390, ARC 26 cm 750/870. A larger mirror increases the rate roughly with its area until the sensor angle cut takes over. Much of the extra rate from large f/1 mirrors is only good for photon counting.
+- The β = 1 mirror scan of `cosmic_acc.py` (3 bar, 8 cm sensor, L = 200 mm; rings entirely on the sensor with all / ≥ 80 % of the photons on the mirror, per hour): 2" 6/17, 3" 27/46, 4" 59/91, 6" 173/216, 20 cm 333/396, ARC 26 cm 776/893 (at 63.6 mrad; statistical errors up to about 12 per hour). A larger mirror increases the rate roughly with its area until the sensor angle cut takes over. Much of the extra rate from large f/1 mirrors is only good for photon counting.
 
 ---
 
@@ -195,14 +195,14 @@ Mirror and SiPM size (`cosmic_spectrum.py`; muons up to 25° from vertical over 
 
 | SiPM | Mirror Ø | Aerogel arcs ≥ 50 % | Full aerogel rings | Gas rings (≥ 80 % of the emitted photons on the SiPM) |
 |---|---|---|---|---|
-| 5.1 cm | 76 mm | 0 → < 0.5 | 0 → 0 | 9.7 → 9.2 |
-| 8 cm | 152 mm | 0 → 5.9 | 0 → 1.3 | 50.5 → 41.1 |
-| 10.2 cm | 152 mm | 29 → 45 | 0.1 → 3.6 | 95 → 73 |
-| 12.8 cm | 152 mm | 72 → 91 | 6.9 → 14.5 | 137 → 103 |
-| 12.8 cm | 200 mm | 111 → 135 | 14 → 24 | 163 → 123 |
+| 5.1 cm | 76 mm | 0 → < 0.5 | 0 → 0 | 9.6 → 9.4 |
+| 8 cm | 152 mm | 0 → 5.9 | 0 → 1.3 | 49.8 → 40.9 |
+| 10.2 cm | 152 mm | 30 → 45 | 0.2 → 3.7 | 94 → 73 |
+| 12.8 cm | 152 mm | 73 → 92 | 7.1 → 14.8 | 136 → 103 |
+| 12.8 cm | 200 mm | 114 → 137 | 15 → 25 | 161 → 123 |
 
-- An arc ≥ 50 % has at least half of the 36 azimuth bins with half of their emitted photons on the SiPM; a full ring has ≥ 90 % of the bins reached; the tile side faces are black.
-- With the spectrum the arcs rise (larger muon flux, smaller rings of slow muons) and the gas rings fall by 5–24 %. Xe in the pores (§6.3) lowers the arcs by 4–17 % and the full rings by 9–24 %.
+- An arc ≥ 50 % has at least half of the 36 azimuth bins holding photons above threshold with half of their emitted photons on the SiPM; a full ring has ≥ 90 % of those bins reached; the tile side faces are black.
+- With the spectrum the arcs rise (larger muon flux, smaller rings of slow muons) and the gas rings fall by 2–24 %. Xe in the pores (§6.3) lowers the arcs by 4–17 % and the full rings by 10–24 %.
 
 - For β = 1 muons, imaging the aerogel needs **both** a SiPM of ≥ 10 cm (≥ 16 matrices, ≥ 1024 channels at 3 mm) **and** a mirror of ≥ 15 cm at f ≈ 20 cm (custom). The arcs and full rings of the 8 cm row come from slow muons with small aerogel angles, so they do not measure the index without the muon momentum.
 - Even then the rings are mostly partial, and a full ring carries only ~25 emitted photons in 320–450 nm (~6 detected).
@@ -244,12 +244,12 @@ Five configurations, in an order still to be decided (§8). Configurations 1 and
    - Radiator: ~20 cm of Xe at 2 and 3 bar, no aerogel.
    - Trigger: the matched scintillator telescope from §5.
    - Expect about 230 ≥ 80 % rings per day through the telescope, of which about 180 carry ≥ 10 FT×QE photons at 2–3 bar (90 at 1 bar; §5).
-2. **Aerogel ring in air:** the 1 cm aerogel tile 1 mm in front of the SiPM, air at atmospheric pressure, and a short-focal-length mirror (Edmund #43-543, 2", f = 50.8 mm, or #43-553, 3", f = 76.2 mm). It measures the aerogel index, dispersion and clarity with air in the pores, the condition in which the vendor quotes n. With the spectrum, 48 (#43-543) and 24 (#43-553) ≥ 80 % rings (of the aerogel photons on the SiPM) and 147 / 103 arcs ≥ 50 % per hour. Xe in the gas changes this by < 2 %; Xe in the pores (configuration 3) lowers the ≥ 80 % rate by 1–7 % / 3–13 % at 1–3 bar. The tile side faces are black in the tracer; polished faces would add light, mostly off the ring.
+2. **Aerogel ring in air:** the 1 cm aerogel tile 1 mm in front of the SiPM, air at atmospheric pressure, and a short-focal-length mirror (Edmund #43-543, 2", f = 50.8 mm, or #43-553, 3", f = 76.2 mm). It measures the aerogel index, dispersion and clarity with air in the pores, the condition in which the vendor quotes n. With the spectrum, 47 (#43-543) and 23 (#43-553) ≥ 80 % rings (of the aerogel photons on the SiPM) and 149 / 104 arcs ≥ 50 % per hour. Xe in the gas changes this by < 2 %; Xe in the pores (configuration 3) lowers the ≥ 80 % rate by 1–6 % / 1–11 % at 1–3 bar. The tile side faces are black in the tracer; polished faces would add light, mostly off the ring.
 3. **Aerogel ring in Xe:** configuration 2 with Xe at 1–3 bar and the same mirror. Relative to 2, it measures the shift of the aerogel angle from Xe in the pores and its time dependence after each pressure change.
 4. **Proximity focusing in air and in Xe:** the tile with a 3–5 cm gap to the same SiPM and no mirror (§6.2). It makes the same air–Xe comparison without mirror systematics and needs a mechanically stable gap.
-   - The muon velocity smears the aerogel angle (rms 38–60 mrad in the tile). With true emission angles (`cosmic_rates_plots.py`, no ring resolution), the β → 1 peak of each distribution carries the 6.32 mrad signal of Xe at 3 bar (6.26–6.38 mrad in a window around the known β = 1 angle), as do the rings of muons above 2 GeV/c; a peak finder on measured angles is still to be built (§8). The plain mean is unstable and biased low by 3–60 %, mainly from muons just below the air threshold that radiate only with Xe in the pores. A window fixed at the air angle keeps about 80 %.
-   - Momentum handles: 0.5–1 m of lead (cut at 0.8–1.5 GeV/c) needs the bottom counter enlarged behind it (the 8 × 8 cm counter keeps 1–8 % of the configuration 3 rings with #43-543, 5–26 % with #43-553; geometry only); the Xe gas-ring tag of configuration 3 keeps 25–51 % of the rings (residual shift ≈ −2 mrad at 3 bar) but cannot tag the air reference.
-5. **Full demonstrator:** configuration 1 with the 1 cm aerogel tile 1 mm in front of the SiPM. Its light misses the mirror for near-vertical muons (§6.1), and it Rayleigh-scatters about a fifth of the gas-ring photons (§6.3). With the tile, a ≥ 80 % ring carries 5.9 FT×QE photons on average at 1 bar and 17.9 at 3 bar, where about 180 rings per day carry ≥ 10.
+   - The muon velocity smears the aerogel angle (rms 38–60 mrad in the tile). With true emission angles (`cosmic_rates_plots.py`, no ring resolution), the β → 1 peak of each distribution carries the 6.32 mrad signal of Xe at 3 bar (6.18–6.36 mrad in a window around the known β = 1 angle), as do the rings of muons above 2 GeV/c; a peak finder on measured angles is still to be built (§8). The plain mean is unstable and biased low by 3–51 %, mainly from muons just below the air threshold that radiate only with Xe in the pores. A window fixed at the air angle keeps about 80 %.
+   - Momentum handles: 0.5–1 m of lead (cut at 0.8–1.5 GeV/c) needs the bottom counter enlarged behind it (the 8 × 8 cm counter keeps 1–8 % of the configuration 3 rings with #43-543, 5–27 % with #43-553; geometry only); the Xe gas-ring tag of configuration 3 keeps 26–51 % of the rings (residual shift ≈ −2 mrad at 3 bar) but cannot tag the air reference.
+5. **Full demonstrator:** configuration 1 with the 1 cm aerogel tile 1 mm in front of the SiPM. Its light misses the mirror for near-vertical muons (§6.1), and it Rayleigh-scatters about a fifth of the gas-ring photons (§6.3). With the tile, a ≥ 80 % ring carries 5.8 FT×QE photons on average at 1 bar and 17.9 at 3 bar, where about 175 rings per day carry ≥ 10.
 6. **Later:** an ARC-like cell with an ~26 cm hexagonal mirror (R ≈ 37 cm, custom or from ARC), an 8 × 8 cm SiPM tile and beam tests.
    - It images the gas and aerogel rings together at ARC scale; even there the aerogel ring is partial for most tracks.
    - Alternative if the goal is purely Xe characterisation with maximum photon statistics: the 6" f = 610 mm mirror (#43-970) with a ~65 cm vessel. That needs ~3× the Xe and a larger sensor.
