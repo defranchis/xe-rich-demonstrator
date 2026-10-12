@@ -133,7 +133,7 @@ def draw(aerogel=True):
     lim, note_xy = (58, (-57, -58)) if aerogel else (40, (-38, -36))
     bx.text(*note_xy, 'Ring centre is set by the track angle (f·tanθ), not its position', fontsize=8, color=MUT)
     bx.set_xlim(-lim, lim); bx.set_ylim(-lim, lim); bx.set_aspect('equal'); bx.axis('off')
-    bx.set_title(f'Sensor plane, top view\nassumed 2×2 × 8×8 SiPMs, {PIXEL_PITCH:g} mm pitch (to be confirmed)',
+    bx.set_title(f'Sensor plane, top view\n2×2 arrays of 8×8 SiPMs, {PIXEL_PITCH:g} mm pitch\n(S13361-3050NE-08, to be confirmed)',
                  fontsize=10, color=INK, loc='left')
     fig.text(0.60, 0.33, notes(k, aerogel), fontsize=9, color=INK, va='top', family='DejaVu Sans')
     return fig

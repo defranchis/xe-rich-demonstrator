@@ -137,9 +137,11 @@ Notes:
 ---
 
 ## 4. Photodetector
-- **Confirmed:** a 2" × 2" active area (50.8 × 50.8 mm).
-- **Still to be confirmed:** the pixel size and part number. It may be a prototype-specific device.
-- The published ARC prototype board has the same footprint: four 8×8 matrices of 3 × 3 mm² SiPMs (dRICH-style, Hamamatsu S13360-3050VS family), 256 channels, ALCOR/dRICH front-end, operating target −60 to −80 °C.
+- Baseline: the published ARC prototype board, 2" × 2" with four Hamamatsu SiPM arrays of 8 × 8 SiPMs (3 × 3 mm² pads at 3.2 mm pitch, 256 channels). With the packages abutting, the pads span 51.2 mm (= 16 × 3.2 mm, the scripts' grid) within a 51.6 mm outline; across the package seams the pad pitch is 3.4 mm. The front end is ALCOR (INFN-BO front-end boards). The cooled baseboard is a ceramic PCB with internal coolant flow, designed for −60 to −80 °C (Pezzulo et al.; Cardinale, slide 11); the demonstrator runs it at −20 °C, the lower end of the arrays' datasheet range.
+- Part number: Hamamatsu S13361-3050NE-08 is the one given for the first baseboard version (Cardinale, slide 10), and is to be confirmed for the ceramic board's arrays, like the window values below.
+- Window: the S13361 datasheet gives an epoxy window of refractive index 1.55 and resin thickness 0.1 ± 0.05 mm. These are datasheet values, still to be confirmed for the arrays on the board.
+- Response: 320–900 nm, PDE 40 % at 450 nm at 3 V overvoltage (datasheet). The datasheet operating range is −20 to +60 °C without dew condensation.
+- Alternative: a 0.8 mm pitch, as in the ARC simulation.
 
 | Pixel pitch | Pixel term per photon at f = 203 mm |
 |---|---|
@@ -253,7 +255,7 @@ Five configurations, in an order still to be decided (§8). Configurations 1 and
    - Alternative if the goal is purely Xe characterisation with maximum photon statistics: the 6" f = 610 mm mirror (#43-970) with a ~65 cm vessel. That needs ~3× the Xe and a larger sensor.
 
 ## 8. Open items
-- SiPM pixel size and part number. This drives the resolution and acceptance numbers.
+- Window of the board's arrays (§4: datasheet values, to be confirmed), the part number of the ceramic board's arrays (§4) and the PDE at the operating overvoltage and temperature.
 - Porosity of the actual tile (0.935 from its density, 0.97 in the code's vacuum-referenced variant; §6.3) and the vendor data.
 - Order of the five configurations (§7).
 - Mechanical design of configurations 2–4: tile holder, gap, trigger.
@@ -292,7 +294,10 @@ Five configurations, in an order still to be decided (§8). Configurations 1 and
   - [ARC_geo_o1_v01.cpp](https://github.com/key4hep/k4geo/blob/main/detector/PID/ARC_geo_o1_v01.cpp)
   - [Pezzulo et al., JINST 21 C06015 (2026)](https://ora.ox.ac.uk/objects/uuid:db2688d0-abe4-47e5-b1b2-c48f67c455b8/files/rqr46r3422)
   - [ARC at RICH2025](https://indico.gsi.de/event/20387/contributions/90364/attachments/51775/78884/RICH2025-ARC-Pezzulo.pdf)
-- SiPM: [ePIC dRICH photodetector unit, NIM A (2024)](https://iris.unito.it/retrieve/handle/2318/2012671/1373309/1-s2.0-S0168900224005953-main.pdf)
+  - [R. Cardinale, SiPM housing with active cooling, RICH2025](https://indico.gsi.de/event/20387/contributions/90422/attachments/51826/79107/RICH2025_RCardinale.pdf) (slides 10–12, 18: baseboards v1 and v2)
+- SiPM:
+  - [ePIC dRICH photodetector unit, NIM A (2024)](https://iris.unito.it/retrieve/handle/2318/2012671/1373309/1-s2.0-S0168900224005953-main.pdf)
+  - [Hamamatsu S13361-3050 series datasheet, KAPD1054E07](https://www.hamamatsu.com/content/dam/hamamatsu-photonics/sites/documents/99_SALES_LIBRARY/ssd/s13361-3050_series_kapd1054e.pdf)
 - Aerogel in gas:
   - [LHCb RICH performance, arXiv:1211.6759](https://arxiv.org/pdf/1211.6759)
   - [LHCb RICH aerogel with LHC data, NIM A](https://www.sciencedirect.com/science/article/abs/pii/S0168900210021522)
