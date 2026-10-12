@@ -1,5 +1,7 @@
 """Muon spectrum parametrisations, range tables, and the momentum-aware cosmic models against the beta = 1 functions."""
 import argparse
+import importlib.util
+from pathlib import Path
 
 import numpy as np
 import pytest
@@ -89,8 +91,20 @@ def test_range_above_table_and_overburden():
 def test_pore_signal_and_chromatic_rms():
     ng = n_xe(400, 3.0); air_ref, vac_ref = pore_signal(3.0)
     assert air_ref == pytest.approx(theta_c(1.03+0.935*(ng-N_AIR))-theta_c(1.03), rel=1e-12)
-    assert vac_ref == pytest.approx(theta_c(1.03+0.97*(ng-1))-theta_c(1.03), rel=1e-12)
+    assert vac_ref == pytest.approx(theta_c(1.03+0.97*(ng-1))-theta_c(1.03+0.97*(N_AIR-1)), rel=1e-12)
     assert 0.9e-3 < chromatic_rms(lambda lam: n_xe(lam, 3.0)) < 1.2e-3
+
+
+def test_xe_air_table_uses_air_run_of_same_variant(tmp_path):
+    spec = importlib.util.spec_from_file_location('cosmic_rates_plots', Path(__file__).parents[1]/'studies'/'cosmic_rates_plots.py')
+    plots = importlib.util.module_from_spec(spec); spec.loader.exec_module(plots)
+
+    def run(variant, th):
+        t = dict(theta_tile_seed=[th, th], theta_tile_win_seed=[th, th], theta_tile_ownwin_seed=[th, th], theta_tile_edge_seed=[th, th],
+                 win_fraction=1.0, ownwin_fraction=1.0, theta_tile_mean_p2=th)
+        return dict(group='c23', variant=variant, rayleigh=False, tile_b1=t, tile_br=t)
+    plots.tables({'c2_f50_pore-vac': run('pore-vac', 243.0), 'c3_f50_xe3_pore-vac': run('pore-vac', 249.5)}, {}, {}, tmp_path)
+    assert '| mirror f50 | 3 bar | pore-vac | 6.50 +- 0.00 |' in (tmp_path/'cosmic_rates_tables.md').read_text()
 
 
 def test_ftqe_beta1_matches_photon_spectrum():

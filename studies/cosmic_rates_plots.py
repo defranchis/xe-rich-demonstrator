@@ -481,12 +481,13 @@ def tables(R, run_of, trig, out):
              ' of the plain tile (fraction kept) | real, window around each run\'s own beta = 1 angle (fraction kept) | real, %g %% quantile'
              ' (beta -> 1 edge) | real, rings of muons with p > 2 GeV/c |' % (100*EDGE_Q))
     L.append('|---|---|---|---|---|---|---|---|---|')
-    pairs = [('c2_%s_plain' % mk, 'c3_%s_%%s_%%s' % mk, 'mirror %s' % mk) for mk in ('f50', 'f76')] + \
-        [('c4_air_g%d_plain' % g, 'c4_%%s_g%d_%%s' % g, 'proximity, gap %d mm' % g) for g in (30, 50, 70)]
-    for ref, pat, lab in pairs:
+    pairs = [('c2_%s_%%s' % mk, 'c3_%s_%%s_%%s' % mk, 'mirror %s' % mk) for mk in ('f50', 'f76')] + \
+        [('c4_air_g%d_%%s' % g, 'c4_%%s_g%d_%%s' % g, 'proximity, gap %d mm' % g) for g in (30, 50, 70)]
+    for rpat, pat, lab in pairs:
         for P in (1.0, 2.0, 3.0):
             for v in ('plain', 'pore-vac', 'pore-air'):
-                nm = pat % (gas_label(P), v)
+                # air run of the same tile variant; the pore-air tile in air is the plain tile
+                nm = pat % (gas_label(P), v); ref = rpat % ('plain' if v == 'pore-air' else v)
                 if nm not in R or ref not in R:
                     continue
                 cells = []

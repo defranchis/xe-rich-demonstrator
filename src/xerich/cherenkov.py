@@ -2,7 +2,7 @@
 import numpy as np
 
 from .constants import AEROGEL_N_AIR, ALPHA, HBARC_EV_CM, HC, T_ROOM
-from .media import XE_INDEX_DEFAULT, aerogel_index, aerogel_index_air, n_xe
+from .media import N_AIR, XE_INDEX_DEFAULT, aerogel_index, aerogel_index_air, n_xe
 
 # ARC SiPM quantum efficiency vs photon energy [eV], ARC_SiPM_QuantumEfficiency of the ARC simulation:
 # k4geo e1ba7bc, FCCee/CLD/compact/CLD_o3_v01/materials_arc_o1_v01.xml:6
@@ -125,7 +125,7 @@ def theta_xe(P_bar, beta=1.0, T=T_ROOM, model=XE_INDEX_DEFAULT):
 
 
 def pore_signal(P_bar, lam=400.0, n_tile=AEROGEL_N_AIR, T=T_ROOM, model=XE_INDEX_DEFAULT):
-    """beta = 1 aerogel-angle shift [rad] from Xe at P_bar in the pores, relative to the tile index n_tile, at lam [nm]:
-    (shift relative to air, media.aerogel_index_air; shift relative to vacuum, media.aerogel_index)."""
-    ng = n_xe(lam, P_bar, T, model); t0 = theta_c(n_tile)
-    return float(theta_c(aerogel_index_air(ng, n_tile))-t0), float(theta_c(aerogel_index(ng, n_tile))-t0)
+    """beta = 1 aerogel-angle shift [rad] from Xe at P_bar in the pores, relative to air in the pores, at lam [nm]:
+    (n_tile = index in air, media.aerogel_index_air; n_tile = index with empty pores, media.aerogel_index)."""
+    ng = n_xe(lam, P_bar, T, model)
+    return tuple(float(theta_c(f(ng, n_tile))-theta_c(f(N_AIR, n_tile))) for f in (aerogel_index_air, aerogel_index))
