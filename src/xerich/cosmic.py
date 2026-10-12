@@ -48,9 +48,11 @@ def emit_batch(layout, rng, P0, U, beta, n_per, origins=ORIGINS, band=None):
     """Cherenkov photons of muons (entry points P0, directions U (M,3), velocities beta (M,)) in layout.
 
     n_per photons per muon and origin (int or {origin: int}), uniform in photon energy over band (default the ARC SiPM
-    QE band), along the track and in azimuth; emission angle cos = 1/(beta n(lambda)). Each photon carries w_ft, the Frank-Tamm photons per
-    muon it stands for (0 below threshold), and qe, the ARC SiPM QE at its energy. Returns a dict of per-photon
-    arrays p, d, lam, reg (start region), muon, origin (index into ORIGINS), phi (azimuth about the track), w_ft, qe.
+    QE band), along the track and in azimuth, one photon per azimuth sector of 2 pi / n_per (every one of the N_ARC
+    bins holds photons when n_per is a multiple of N_ARC or at least 2 N_ARC); emission angle cos = 1/(beta n(lambda)).
+    Each photon carries w_ft, the Frank-Tamm photons per muon it stands for (0 below threshold), and qe, the ARC SiPM QE
+    at its energy. Returns a dict of per-photon arrays p, d, lam, reg (start region), muon, origin (index into ORIGINS),
+    phi (azimuth about the track), w_ft, qe.
     Raises ValueError for a track with more than MAX_SEGMENTS segments in one origin.
     """
     E_lo, E_hi = qe_band() if band is None else band
@@ -77,7 +79,7 @@ def emit_batch(layout, rng, P0, U, beta, n_per, origins=ORIGINS, band=None):
         s = a0[idx, k]+rng.random(n)*ln[idx, k]
         E = rng.uniform(E_lo, E_hi, n); lam = HC/E; nn = index[org](lam)
         ct = 1/(beta[idx]*nn); ok = ct < 1; ct = np.minimum(ct, 1.0); st = np.sqrt(1-ct*ct)
-        phi = rng.uniform(0, 2*np.pi, n)
+        phi = 2*np.pi*(np.tile(np.arange(n_org), len(mu))+rng.random(n))/n_org   # one photon per sector of 2 pi / n_org
         e1, e2 = tracer.basis(U[idx])
         d = ct[:, None]*U[idx]+st[:, None]*(np.cos(phi)[:, None]*e1+np.sin(phi)[:, None]*e2)
         w = np.where(ok, (E_hi-E_lo)*ALPHA/HBARC_EV_CM*(1-ct*ct)*Lt[idx]/10/n_org, 0.0)
@@ -93,10 +95,10 @@ def trace_batch(layout, rng, P0, U, beta, n_per, origins=ORIGINS, band=None, max
 
     Returns emit_ft, emit_qe (emitted FT and FT x QE photons), det_ft, det_qe (detected on the sensor), det_qe_clean
     (detected without Rayleigh scatter), out_ft (reaching the sensor plane outside the sensor), mirror_ft (lost at the
-    mirror aperture; photons absorbed on a tile side face count in neither), arc (fraction of the N_ARC azimuth bins where
-    a photon keeps half its weight on the sensor) and arc_half (fraction of the bins with at least half of their emitted
-    weight on the sensor). Fractions: fm = 1 - mirror_ft/emit_ft (photons on the mirror), fs = det_ft/(det_ft + out_ft)
-    (ring on the sensor), fd = det_ft/emit_ft.
+    mirror aperture; photons absorbed on a tile side face count in neither), arc (fraction of the N_ARC azimuth bins
+    holding photons above threshold where a photon keeps half its weight on the sensor) and arc_half (fraction of those
+    bins with at least half of their emitted weight on the sensor). Fractions: fm = 1 - mirror_ft/emit_ft (photons on
+    the mirror), fs = det_ft/(det_ft + out_ft) (ring on the sensor), fd = det_ft/emit_ft.
     """
     M = len(P0); no = len(ORIGINS)
     res = {k: np.zeros((M, no)) for k in ('emit_ft', 'emit_qe', 'det_ft', 'det_qe', 'det_qe_clean', 'out_ft', 'mirror_ft', 'arc', 'arc_half')}
@@ -122,11 +124,12 @@ def trace_batch(layout, rng, P0, U, beta, n_per, origins=ORIGINS, band=None, max
         res[name] += np.bincount(kk[m], w[m], M*no).reshape(M, no)
     b = np.minimum((sel['phi'][i]/(2*np.pi)*N_ARC).astype(int), N_ARC-1)
     hitbin = np.zeros(M*no*N_ARC, bool); hitbin[(kk*N_ARC+b)[det&(ends['w'] >= 0.5)]] = True   # main branch only, not Fresnel ghosts
-    res['arc'] = hitbin.reshape(M, no, N_ARC).mean(2)
     b0 = np.minimum((sel['phi']/(2*np.pi)*N_ARC).astype(int), N_ARC-1)
     eb = np.bincount(key[live]*N_ARC+b0, sel['w_ft'], M*no*N_ARC)
     db = np.bincount((kk*N_ARC+b)[det], w[det], M*no*N_ARC)
-    res['arc_half'] = ((eb > 0)&(db >= 0.5*eb)).reshape(M, no, N_ARC).mean(2)
+    nb = np.maximum((eb > 0).reshape(M, no, N_ARC).sum(2), 1)   # bins holding photons above threshold
+    res['arc'] = hitbin.reshape(M, no, N_ARC).sum(2)/nb
+    res['arc_half'] = ((eb > 0)&(db >= 0.5*eb)).reshape(M, no, N_ARC).sum(2)/nb
     return res
 
 

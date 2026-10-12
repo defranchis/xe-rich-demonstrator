@@ -3,11 +3,12 @@
 Reads cosmic_rates_<group>.npz and cosmic_rates_meta.json from --input. Ring definitions: gas ring, full = >= 99 % of
 the sampled photons on the mirror and of the ring on the SiPM, >= 80 % = >= 80 % on both (docs/design_options.md
 section 5); aerogel ring, full / >= 80 % = >= 99 % / >= 80 % of the emitted photons on the SiPM (losses through the
-tile sides count; the tracer treats the tile side faces as black); arc >= 50 % = half of the 36 azimuth bins with at
-least half of their emitted photons on the SiPM (arc*_any: a bin counts if one sampled photon reaches the SiPM, the
-definition of the beta = 1 mirror toys). Rates per hour: muons through the top counter plane (all sampled muons) and
-through the telescope (both counters), at beta = 1 with the cos^2 law and I0 (the beta = 1 toys) and with the real
-momentum spectrum (default parametrisation; the others as weights). Mean +- standard deviation over the seeds.
+tile sides count; the tracer treats the tile side faces as black); arc >= 50 % = half of the 36 azimuth bins (those
+holding photons above threshold) with at least half of their emitted photons on the SiPM (arc*_any: a bin counts if one
+sampled photon reaches the SiPM, the definition of the beta = 1 mirror toys). Rates per hour: muons through the top
+counter plane (all sampled muons) and through the telescope (both counters), at beta = 1 with the cos^2 law and I0 (the
+beta = 1 toys) and with the real momentum spectrum (default parametrisation; the others as weights). Mean +- standard
+deviation over the seeds.
 Aerogel angle in the tile, per seed, from the true emission angles (no ring resolution): plain mean, mean in a window
 of -10 to +20 mrad around the beta = 1 angle of the plain n = 1.03 tile (fixed) or of the run's own, known tile index
 (own window, truth level), and the 95 % quantile (beta -> 1 edge).

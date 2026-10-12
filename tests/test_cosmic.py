@@ -155,3 +155,15 @@ def test_footprint_slope_term_ab():
     assert abs(new-trc) < 0.01 and old < trc-0.15
     vert = (np.array([30.0]), np.array([0.0]), np.array([0.0]), np.array([0.0]), th, lay.mirror, lay.sensor, f, 16, 72)
     assert cosmic.gas_ring_fractions(*vert)[0][0] == pytest.approx(cosmic.gas_ring_fractions(*vert, slope_term=True)[0][0], abs=1e-12)
+
+
+def test_arc_of_contained_ring_is_full():
+    """A gas ring fully on the sensor covers every azimuth bin, also with few photons per muon and near threshold."""
+    lay = Phase1Layout(Mirror(MIRROR_R, MIRROR_D), Sensor(25.4), xenon(3.0)); M = 200
+    P0 = np.tile([0.0, 0.0, lay.z_sensor], (M, 1)); U = np.tile([0.0, 0.0, -1.0], (M, 1))
+    b_mid = 1/n_xe(400.0, 3.0)   # about half of the QE band below threshold
+    for n in (cosmic.N_ARC, 2*cosmic.N_ARC):
+        for b in (1.0, b_mid):
+            r = cosmic.trace_batch(lay, np.random.default_rng(n), P0, U, np.full(M, b), n, ('gas',))
+            lit = r['emit_ft'][:, 0] > 0
+            assert lit.sum() > M/2 and np.all(r['arc'][lit, 0] == 1) and np.all(r['arc_half'][lit, 0] == 1)
