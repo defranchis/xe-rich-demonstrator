@@ -6,7 +6,7 @@ stdout, cosmic_spectrum_*.png, cosmic_spectrum.json:
 - fractions of the triggered muons above the Xe and aerogel thresholds vs pressure, overburden sensitivity;
 - aerogel Cherenkov angle vs momentum; momentum cut of an absorber from the PDG CSDA range;
 - gas-ring rates of the table of docs/design_options.md section 5 (muons over a box at the mirror plane) with the
-  footprint slope term on (beta = 1 toys) and off, at beta = 1 and with the spectrum, and the fast model against the
+  footprint slope term on (legacy beta = 1 toys) and off, at beta = 1 and with the spectrum, and the fast model against the
   3D tracer.
 """
 import os

@@ -21,6 +21,7 @@ from .muons import flux_through_square, sample_box
 
 UP = np.array([0, 0, 1.])
 DOWN = np.array([0, 0, -1.])
+CHUNK = 20000                # muons per vectorised block of the footprint model
 
 
 def aberration(h0, tilt, rng, mirror, L, th, n=4000):
@@ -49,13 +50,40 @@ def aberration(h0, tilt, rng, mirror, L, th, n=4000):
     return np.arctan(r/f), rho
 
 
-def footprint_fraction(x, y, sx, sy, L, thc, a, ns, npsi):
+def footprint_fraction_tracks(x, y, u, L, thc, a, ns, npsi):
+    """Fraction of Cherenkov photons landing within radius a of the axis on the flat mirror plane z = 0.
+
+    Tracks with unit directions u (N,3, downward) hit z = 0 at (x, y); photons at angle thc (scalar or per track) are
+    emitted at ns heights over L and npsi azimuths and follow straight lines from their emission point. Photons not
+    going down are counted as lost.
+    """
+    u = np.asarray(u, float); N = len(u); thc = np.broadcast_to(np.asarray(thc, float), (N,))
+    S = (np.arange(ns)+0.5)/ns*L; psi = azimuths(npsi)
+    e1, e2 = tracer.basis(u)
+    out = np.empty(N)
+    for i0 in range(0, N, CHUNK):
+        sl = slice(i0, i0+CHUNK)
+        d = (np.cos(thc[sl])[:, None, None]*u[sl, None, :]
+             + np.sin(thc[sl])[:, None, None]*(np.cos(psi)[None, :, None]*e1[sl, None, :]+np.sin(psi)[None, :, None]*e2[sl, None, :]))
+        down = d[..., 2] < 0
+        with np.errstate(divide='ignore', invalid='ignore'):
+            ox = d[..., 0]/-d[..., 2]-u[sl, None, 0]/-u[sl, None, 2]; oy = d[..., 1]/-d[..., 2]-u[sl, None, 1]/-u[sl, None, 2]
+        hx = x[sl, None, None]+S[None, :, None]*ox[:, None, :]; hy = y[sl, None, None]+S[None, :, None]*oy[:, None, :]
+        out[sl] = ((hx**2+hy**2 < a*a)&down[:, None, :]).mean(axis=(1, 2))
+    return out
+
+
+def footprint_fraction(x, y, sx, sy, L, thc, a, ns, npsi, slope_term=False):
     """Fraction of Cherenkov photons landing within radius a of the mirror axis (flat mirror).
 
     Tracks hit the mirror plane at (x, y) with slopes (sx, sy); photons are emitted at
-    ns heights over L and npsi azimuths. The footprint offset includes the term
-    S (sx, sy) from the track slope.
+    ns heights over L and npsi azimuths along straight tracks (footprint_fraction_tracks).
+    slope_term=True: footprint of the legacy beta = 1 toys, which adds S (sx, sy) to the
+    offset and so counts the track displacement twice.
     """
+    if not slope_term:
+        c = 1/np.sqrt(1+sx*sx+sy*sy)
+        return footprint_fraction_tracks(x, y, np.stack([sx*c, sy*c, -c], 1), L, thc, a, ns, npsi)
     s = (np.arange(ns)+0.5)/ns*L; psi = azimuths(npsi)
     S, P = np.meshgrid(s, psi, indexing='ij')
     hx = x[:, None, None]+S*sx[:, None, None]+S*np.tan(thc)*np.cos(P)
@@ -64,16 +92,16 @@ def footprint_fraction(x, y, sx, sy, L, thc, a, ns, npsi):
 
 
 def ring_rate_full(rng, mirror, sensor, L, thc, frac_req=1.0, N=400000, box_margin=0.6,
-                   thmax=np.radians(35), ns=8, npsi=16):
+                   thmax=np.radians(35), ns=8, npsi=16, slope_term=False):
     """Rate [1/h] of rings fully inside the sensor with >= frac_req of the photons on the mirror.
 
     The ring sits at f (sx, sy) on the sensor with radius f tan(thc). Also returns the
-    mean collected photon fraction of the accepted muons.
+    mean collected photon fraction of the accepted muons. slope_term: see footprint_fraction.
     """
     a = mirror.clear_radius; f = mirror.f
     box = a+L*box_margin
     x, y, sx, sy, w = sample_box(rng, N, box, thmax)
-    inside = footprint_fraction(x, y, sx, sy, L, thc, a, ns, npsi)
+    inside = footprint_fraction(x, y, sx, sy, L, thc, a, ns, npsi, slope_term)
     rr = f*np.tan(thc); cx, cy = f*sx, f*sy
     acc = (inside >= frac_req-1e-9)&ring_in_square(cx, cy, rr, sensor.half)
     rate = mc_rate(w, acc, box, thmax)
@@ -82,15 +110,15 @@ def ring_rate_full(rng, mirror, sensor, L, thc, frac_req=1.0, N=400000, box_marg
 
 
 def ring_rate_partial(rng, mirror, sensor, L, thc, req_m=0.8, req_s=0.8, N=300000, box_margin=0.4,
-                      thmax=np.radians(25), ns=8, npsi=24):
+                      thmax=np.radians(25), ns=8, npsi=24, slope_term=False):
     """Rates [1/h] of rings with >= req_m of the photons on the mirror and >= req_s of the ring on the sensor.
 
-    Returns (rate with the requirements, rate with full containment on both).
+    Returns (rate with the requirements, rate with full containment on both). slope_term: see footprint_fraction.
     """
     a = mirror.clear_radius; f = mirror.f
     box = a+L*box_margin
     x, y, sx, sy, w = sample_box(rng, N, box, thmax)
-    fm = footprint_fraction(x, y, sx, sy, L, thc, a, ns, npsi)
+    fm = footprint_fraction(x, y, sx, sy, L, thc, a, ns, npsi, slope_term)
     rr = f*np.tan(thc); cx, cy = f*sx, f*sy
     fs = ring_fraction_in_square(cx, cy, rr, azimuths(npsi), sensor.half)
     acc = (fm >= req_m)&(fs >= req_s)

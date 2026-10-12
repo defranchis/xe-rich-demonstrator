@@ -17,14 +17,14 @@ LAM = 400                    # wavelength for the indices [nm]
 
 
 def main():
-    model = cli.xe_index(cli.parser(__doc__)).parse_args().xe_index
+    args = cli.slope_term(cli.xe_index(cli.parser(__doc__))).parse_args(); model = args.xe_index
     rng = np.random.default_rng(3)
     for P in (2, 3):
         thc = theta_c(n_xe(LAM, P, model=model))
         print('P=%d bar theta_c=%.1f mrad, ring radius at f=203: %.1f mm' % (P, 1e3*thc, F_ROUND*np.tan(thc)))
         for D in (50.8, 76.2):
             for half, lab in ((SENSOR_HALF_PROTO, '5.1x5.1 cm (4x 8x8, 3.2mm pitch)'), (20, '4x4 cm'), (40, '8x8 cm')):
-                r80, r100 = ring_rate_partial(rng, Mirror.from_focal(F, D), Sensor(half), L, thc)
+                r80, r100 = ring_rate_partial(rng, Mirror.from_focal(F, D), Sensor(half), L, thc, slope_term=args.slope_term)
                 print('   mirror %.1f mm, sensor %-32s: >=80%% ring %5.1f/h   full ring %5.1f/h' % (D, lab, r80, r100))
     na = AEROGEL_N_AIR
     for P in (2, 3):

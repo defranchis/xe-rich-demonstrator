@@ -45,3 +45,10 @@ def thc(p):
 def thc_value(args, P_bar):
     """Gas Cherenkov angle [rad] for beta = 1 at P_bar [bar]: --thc-mrad if given, else cherenkov.theta_xe with --xe-index."""
     return args.thc_mrad/1e3 if args.thc_mrad is not None else theta_xe(P_bar, model=args.xe_index)
+
+
+def slope_term(p):
+    """Add the --slope-term option (footprint slope term of the legacy beta = 1 toys, see sim.footprint_fraction) to the parser p."""
+    p.add_argument('--slope-term', action='store_true',
+                   help='mirror footprint with the extra track-slope offset of the legacy scripts, which counts the track displacement twice')
+    return p

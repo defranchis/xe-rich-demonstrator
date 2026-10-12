@@ -1,7 +1,8 @@
 """Momentum-aware cosmic-muon models: per-muon velocity in the fast gas-ring footprint model and in the 3D tracer.
 
 - gas_ring_fractions: flat-mirror footprint and sensor containment of the gas ring with a per-muon Cherenkov angle;
-  slope_term=True keeps the footprint of sim.footprint_fraction (beta = 1 toys), the default traces straight lines.
+  slope_term=True keeps the slope-term footprint of the legacy beta = 1 toys (sim.footprint_fraction), the default traces
+  straight lines.
 - emit_batch, trace_batch: Cherenkov photons of many muons at their own velocity in a Phase1Layout, traced with
   tracer.trace and summed per muon and origin (gas, tile).
 No photodetection efficiency other than the ARC SiPM QE weighting, no mirror reflectivity, no absorption. The tile side
@@ -15,35 +16,11 @@ from . import tracer
 from .analysis import azimuths
 from .cherenkov import qe_arc, qe_band
 from .constants import ALPHA, HBARC_EV_CM, HC
-from .sim import footprint_fraction, track_segments
+from .sim import footprint_fraction, footprint_fraction_tracks, track_segments
 
 ORIGINS = ('gas', 'tile')
 N_ARC = 36                   # azimuth bins of the arc coverage
-CHUNK = 20000                # muons per vectorised block of the footprint model
 MAX_SEGMENTS = 3             # track segments per origin handled by emit_batch
-
-
-def footprint_fraction_tracks(x, y, u, L, thc, a, ns, npsi):
-    """Fraction of Cherenkov photons landing within radius a of the axis on the flat mirror plane z = 0.
-
-    Tracks with unit directions u (N,3, downward) hit z = 0 at (x, y); photons at angle thc (scalar or per track) are
-    emitted at ns heights over L and npsi azimuths and follow straight lines from their emission point. Photons not
-    going down are counted as lost.
-    """
-    u = np.asarray(u, float); N = len(u); thc = np.broadcast_to(np.asarray(thc, float), (N,))
-    S = (np.arange(ns)+0.5)/ns*L; psi = azimuths(npsi)
-    e1, e2 = tracer.basis(u)
-    out = np.empty(N)
-    for i0 in range(0, N, CHUNK):
-        sl = slice(i0, i0+CHUNK)
-        d = (np.cos(thc[sl])[:, None, None]*u[sl, None, :]
-             + np.sin(thc[sl])[:, None, None]*(np.cos(psi)[None, :, None]*e1[sl, None, :]+np.sin(psi)[None, :, None]*e2[sl, None, :]))
-        down = d[..., 2] < 0
-        with np.errstate(divide='ignore', invalid='ignore'):
-            ox = d[..., 0]/-d[..., 2]-u[sl, None, 0]/-u[sl, None, 2]; oy = d[..., 1]/-d[..., 2]-u[sl, None, 1]/-u[sl, None, 2]
-        hx = x[sl, None, None]+S[None, :, None]*ox[:, None, :]; hy = y[sl, None, None]+S[None, :, None]*oy[:, None, :]
-        out[sl] = ((hx**2+hy**2 < a*a)&down[:, None, :]).mean(axis=(1, 2))
-    return out
 
 
 def gas_ring_fractions(x, y, sx, sy, thc, mirror, sensor, L, ns=8, npsi=24, slope_term=False):
@@ -51,12 +28,12 @@ def gas_ring_fractions(x, y, sx, sy, thc, mirror, sensor, L, ns=8, npsi=24, slop
 
     Muons hit the mirror plane at (x, y) with slopes (sx, sy) = tan(zenith)(cos, sin)(azimuth); thc is the Cherenkov
     angle, scalar or per muon. The ring of radius f tan(thc) sits at f (sx, sy) on the sensor. slope_term=True uses
-    sim.footprint_fraction (footprint shifted by S (sx, sy), the beta = 1 toys; scalar or per-muon thc).
+    sim.footprint_fraction with its slope term (footprint shifted by S (sx, sy), the legacy beta = 1 toys; scalar or per-muon thc).
     """
     a = mirror.clear_radius; f = mirror.f
     if slope_term:
         th = np.asarray(thc, float)
-        fm = footprint_fraction(x, y, sx, sy, L, th if th.ndim == 0 else th[:, None, None], a, ns, npsi)
+        fm = footprint_fraction(x, y, sx, sy, L, th if th.ndim == 0 else th[:, None, None], a, ns, npsi, slope_term=True)
     else:
         c = 1/np.sqrt(1+sx*sx+sy*sy)
         fm = footprint_fraction_tracks(x, y, np.stack([sx*c, sy*c, -c], 1), L, thc, a, ns, npsi)

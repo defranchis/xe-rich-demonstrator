@@ -5,7 +5,7 @@ import numpy as np
 import pytest
 
 from xerich import cli, cosmic, muons, sim
-from xerich.analysis import mc_rate
+from xerich.analysis import mc_rate, ring_in_square
 from xerich.cherenkov import PhotonSpectrum, chromatic_rms, ftqe_angle_yield, pore_signal, qe_arc, qe_band, theta_c, theta_xe
 from xerich.constants import COSMIC_I0, MIRROR_D, MIRROR_R, MUON_THMAX
 from xerich.layout import Aerogel, Mirror, Phase1Layout, Sensor
@@ -114,9 +114,24 @@ def test_beta1_limit_bit_identical_partial_and_full():
     old = sim.ring_rate_partial(np.random.default_rng(3), M, S, L, thc, N=40000)
     rng = np.random.default_rng(3); box = M.clear_radius+L*0.4; thmax = np.radians(25)
     x, y, sx, sy, w = muons.sample_box(rng, 40000, box, thmax)
-    fm, fs = cosmic.gas_ring_fractions(x, y, sx, sy, np.full(len(x), thc), M, S, L, 8, 24, slope_term=True)
+    fm, fs = cosmic.gas_ring_fractions(x, y, sx, sy, np.full(len(x), thc), M, S, L, 8, 24)
     new = (mc_rate(w, (fm >= .8)&(fs >= .8), box, thmax)*3600, mc_rate(w, (fm >= .999)&(fs >= .999), box, thmax)*3600)
     assert old == new
+
+
+def test_ring_rate_full_inclined_track():
+    """ring_rate_full takes the straight-track footprint, which keeps all the light of an inclined track as the tracer does."""
+    lay = Phase1Layout(Mirror(MIRROR_R, MIRROR_D), Sensor(40), xenon(3.0)); M = lay.mirror; f = lay.z_sensor; th = theta_xe(3.0)
+    s = 0.05; c = 1/np.sqrt(1+s*s)
+    r = cosmic.trace_batch(lay, np.random.default_rng(1), np.array([[20.0-f*s, 0, f]]), np.array([[s*c, 0, -c]]), np.array([1.0]), 20000, ('gas',))
+    one = (np.array([20.0]), np.array([0.0]), np.array([s]), np.array([0.0]), f, th, M.clear_radius, 8, 16)
+    assert cosmic.fractions(r, 'gas')[0][0] == sim.footprint_fraction(*one)[0] == 1.0
+    assert sim.footprint_fraction(*one, slope_term=True)[0] < 0.9
+    rng = np.random.default_rng(2); box = M.clear_radius+f*0.6; thmax = np.radians(35)
+    x, y, sx, sy, w = muons.sample_box(rng, 40000, box, thmax); cz = 1/np.sqrt(1+sx*sx+sy*sy)
+    fm = cosmic.footprint_fraction_tracks(x, y, np.stack([sx*cz, sy*cz, -cz], 1), f, th, M.clear_radius, 8, 16)
+    acc = (fm >= 1-1e-9)&ring_in_square(M.f*sx, M.f*sy, M.f*np.tan(th), lay.sensor.half)
+    assert sim.ring_rate_full(np.random.default_rng(2), M, lay.sensor, f, th, N=40000)[0] == mc_rate(w, acc, box, thmax)*3600
 
 
 def test_beta1_limit_bit_identical_proximity():

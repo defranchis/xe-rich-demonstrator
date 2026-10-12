@@ -23,7 +23,8 @@ SIMPLE = ('raytrace', 'cosmic_acc', 'cosmic_acc2', 'toy_aerogel', 'toy_scan', 't
           'plot_spectra', 'sketch', 'sketch_phase1')
 LEGACY_THC_MRAD = '63.6'   # fixed Xe Cherenkov angle of the legacy raytrace and cosmic_acc scripts [mrad]
 XE_INDEX = ('cosmic_acc2', 'toy_aerogel', 'toy_scan', 'toy_prox', 'plot_spectra', 'toy_plots', 'plot_lambda', 'plot_fcc')
-LEGACY_ARGS = {'raytrace': ('--thc-mrad', LEGACY_THC_MRAD), 'cosmic_acc': ('--thc-mrad', LEGACY_THC_MRAD), 'toy_prox': ('--legacy',)}
+LEGACY_ARGS = {'raytrace': ('--thc-mrad', LEGACY_THC_MRAD), 'cosmic_acc': ('--thc-mrad', LEGACY_THC_MRAD, '--slope-term'),
+               'cosmic_acc2': ('--slope-term',), 'toy_prox': ('--legacy',)}
 NUM = re.compile(r'[-+]?(?:\d+\.\d*|\.\d+|\d+)(?:[eE][-+]?\d+)?')
 
 
