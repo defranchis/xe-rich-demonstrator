@@ -1,4 +1,4 @@
-"""To-scale sketch of the mirror demonstrator: side view, sensor top view and key numbers."""
+"""To-scale sketch of the mirror pre-demonstrator: side view, sensor top view and key numbers."""
 import numpy as np
 from matplotlib.patches import Circle, Rectangle
 

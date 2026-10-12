@@ -22,7 +22,7 @@ M_MU = 0.10565839         # muon mass (PDG muon tables)
 
 # Cosmic muons
 COSMIC_I0 = 70.0                 # vertical intensity [m^-2 s^-1 sr^-1], cos^2 zenith law
-MUON_THMAX = np.radians(75)      # zenith cut of the 3D toys [rad]
+MUON_THMAX = np.radians(75)      # zenith cut of the cosmic-muon models [rad]
 COSMIC_I0_PMIN = 1.0             # momentum above which COSMIC_I0 counts the vertical muons [GeV/c]
 
 # f = 203 mm mirror of configurations 1 and 5 (Edmund #43-584)

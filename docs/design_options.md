@@ -1,8 +1,8 @@
-# Xe RICH demonstrator: summary of the options explored
+# Xe RICH pre-demonstrator: summary of the options explored
 
-This summarises the design exploration for a lab demonstrator of pressurised xenon as the ARC gas radiator. The study drivers in `studies/` produce every number quoted here and the corresponding plots; the [README](../README.md) lists their outputs and the assumptions and simplifications.
+This summarises the design exploration for a lab pre-demonstrator of pressurised xenon as the ARC gas radiator (the demonstrator proper is the later set-up with all the ARC baseline specifications). The study drivers in `studies/` produce every number quoted here and the corresponding plots; the [README](../README.md) lists their outputs and the assumptions and simplifications.
 
-**Status in one paragraph.** The plan has five configurations (§7). (1) Gas-ring imaging with cosmic muons: a stock 3" spherical mirror with f ≈ 203 mm, a 2" × 2" SiPM plane at its focus and ~20 cm of Xe at 2–3 bar. (2, 3) The aerogel ring imaged with a short-focal-length mirror, in air and in Xe, which measures how Xe in the pores shifts the aerogel index. (4) The same comparison by proximity focusing, without a mirror, in air and in Xe. (5) The full demonstrator: configuration 1 with the 1 cm aerogel tile 1 mm in front of the SiPM; the aerogel ring is not imaged in this geometry (for near-vertical muons its light misses the mirror, §6.1), and the tile Rayleigh-scatters about a fifth of the gas-ring photons (§6.3). A full-size, ARC-like cell needs a custom mirror and is left for later.
+**Status in one paragraph.** The plan has five configurations (§7). (1) Gas-ring imaging with cosmic muons: a stock 3" spherical mirror with f ≈ 203 mm, a 2" × 2" SiPM plane at its focus and ~20 cm of Xe at 2–3 bar. (2, 3) The aerogel ring imaged with a short-focal-length mirror, in air and in Xe, which measures how Xe in the pores shifts the aerogel index. (4) The same comparison by proximity focusing, without a mirror, in air and in Xe. (5) The full set-up: configuration 1 with the 1 cm aerogel tile 1 mm in front of the SiPM; the aerogel ring is not imaged in this geometry (for near-vertical muons its light misses the mirror, §6.1), and the tile Rayleigh-scatters about a fifth of the gas-ring photons (§6.3). A full-size, ARC-like cell needs a custom mirror and is left for later.
 
 ---
 
@@ -132,12 +132,12 @@ Notes:
 - **Sensor:** 8 × 8 cm SiPM, 0.8 mm pitch in the simulation (the JINST paper quotes 0.5 mm as baseline), with a 2 mm cooling plate.
 - **Aerogel:** 1 cm, n = 1.03 at 400 nm.
 - These parameters were optimised for C₄F₁₀ at 1 bar (θc ≈ 53 mrad). Xe at 2 bar is similar. At 3 bar the ring is ~20 % larger, so the parameters need re-optimisation.
-- Implication for the demonstrator: f ≈ 20 cm with ~18–20 cm of gas reproduces the central barrel cell.
+- Implication for the pre-demonstrator: f ≈ 20 cm with ~18–20 cm of gas reproduces the central barrel cell.
 
 ---
 
 ## 4. Photodetector
-- Baseline: the published ARC prototype board, 2" × 2" with four Hamamatsu SiPM arrays of 8 × 8 SiPMs (3 × 3 mm² pads at 3.2 mm pitch, 256 channels). With the packages abutting, the pads span 51.2 mm (= 16 × 3.2 mm, the scripts' grid) within a 51.6 mm outline; across the package seams the pad pitch is 3.4 mm. The front end is ALCOR (INFN-BO front-end boards). The cooled baseboard is a ceramic PCB with internal coolant flow, designed for −60 to −80 °C (Pezzulo et al.; Cardinale, slide 11); the demonstrator runs it at −20 °C, the lower end of the arrays' datasheet range.
+- Baseline: the published ARC prototype board, 2" × 2" with four Hamamatsu SiPM arrays of 8 × 8 SiPMs (3 × 3 mm² pads at 3.2 mm pitch, 256 channels). With the packages abutting, the pads span 51.2 mm (= 16 × 3.2 mm, the scripts' grid) within a 51.6 mm outline; across the package seams the pad pitch is 3.4 mm. The front end is ALCOR (INFN-BO front-end boards). The cooled baseboard is a ceramic PCB with internal coolant flow, designed for −60 to −80 °C (Pezzulo et al.; Cardinale, slide 11); the pre-demonstrator runs it at −20 °C, the lower end of the arrays' datasheet range.
 - Part number: Hamamatsu S13361-3050NE-08 is the one given for the first baseboard version (Cardinale, slide 10), and is to be confirmed for the ceramic board's arrays, like the window values below.
 - Window: the S13361 datasheet gives an epoxy window of refractive index 1.55 and resin thickness 0.1 ± 0.05 mm. These are datasheet values, still to be confirmed for the arrays on the board.
 - Response: 320–900 nm, PDE 40 % at 450 nm at 3 V overvoltage (datasheet). The datasheet operating range is −20 to +60 °C without dew condensation.
@@ -249,7 +249,7 @@ Five configurations, in an order still to be decided (§8). Configurations 1 and
 4. **Proximity focusing in air and in Xe:** the tile with a 3–5 cm gap to the same SiPM and no mirror (§6.2). It makes the same air–Xe comparison without mirror systematics and needs a mechanically stable gap.
    - The muon velocity smears the aerogel angle (rms 38–60 mrad in the tile). With true emission angles (`cosmic_rates_plots.py`, no ring resolution), the β → 1 peak of each distribution carries the 6.32 mrad signal of Xe at 3 bar (6.18–6.36 mrad in a window around the known β = 1 angle), as do the rings of muons above 2 GeV/c; a peak finder on measured angles is still to be built (§8). The plain mean is unstable and biased low by 3–51 %, mainly from muons just below the air threshold that radiate only with Xe in the pores. A window fixed at the air angle keeps about 80 %.
    - Momentum handles: 0.5–1 m of lead (cut at 0.8–1.5 GeV/c) needs the bottom counter enlarged behind it (the 8 × 8 cm counter keeps 1–8 % of the configuration 3 rings with #43-543, 5–27 % with #43-553; geometry only); the Xe gas-ring tag of configuration 3 keeps 26–51 % of the rings (residual shift ≈ −2 mrad at 3 bar) but cannot tag the air reference.
-5. **Full demonstrator:** configuration 1 with the 1 cm aerogel tile 1 mm in front of the SiPM. Its light misses the mirror for near-vertical muons (§6.1), and it Rayleigh-scatters about a fifth of the gas-ring photons (§6.3). With the tile, a ≥ 80 % ring carries 5.8 FT×QE photons on average at 1 bar and 17.9 at 3 bar, where about 175 rings per day carry ≥ 10.
+5. **Full set-up:** configuration 1 with the 1 cm aerogel tile 1 mm in front of the SiPM. Its light misses the mirror for near-vertical muons (§6.1), and it Rayleigh-scatters about a fifth of the gas-ring photons (§6.3). With the tile, a ≥ 80 % ring carries 5.8 FT×QE photons on average at 1 bar and 17.9 at 3 bar, where about 175 rings per day carry ≥ 10.
 6. **Later:** an ARC-like cell with an ~26 cm hexagonal mirror (R ≈ 37 cm, custom or from ARC), an 8 × 8 cm SiPM tile and beam tests.
    - It images the gas and aerogel rings together at ARC scale; even there the aerogel ring is partial for most tracks.
    - Alternative if the goal is purely Xe characterisation with maximum photon statistics: the 6" f = 610 mm mirror (#43-970) with a ~65 cm vessel. That needs ~3× the Xe and a larger sensor.
@@ -259,7 +259,7 @@ Five configurations, in an order still to be decided (§8). Configurations 1 and
 - Porosity of the actual tile (0.935 from its density, 0.97 in the code's vacuum-referenced variant; §6.3) and the vendor data.
 - Order of the five configurations (§7).
 - Mechanical design of configurations 2–4: tile holder, gap, trigger.
-- Fold in the measured mirror reflectivity, SiPM PDE and aerogel transmission. Add photon statistics to the toys.
+- Fold in the measured mirror reflectivity, SiPM PDE and aerogel transmission. Add photon statistics to the fast simulation (3D tracer).
 - Xe virial coefficient and UV dispersion: checked (§1.2).
 - Cosmic rates (Guan et al. parametrisation, sea level): altitude and geomagnetic cutoff (§5), the trigger counter geometry, the momentum handle and a data-level estimator of the aerogel angle for configurations 2–4, and the tile side faces (§7) are open.
 - Compare against the ARC full simulation (`ARC_Simulation_Reconstruction`), with Xe properties tuned.

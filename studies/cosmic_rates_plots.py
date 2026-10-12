@@ -6,7 +6,7 @@ section 5); aerogel ring, full / >= 80 % = >= 99 % / >= 80 % of the emitted phot
 tile sides count; the tracer treats the tile side faces as black); arc >= 50 % = half of the 36 azimuth bins (those
 holding photons above threshold) with at least half of their emitted photons on the SiPM (arc*_any: a bin counts if one
 sampled photon reaches the SiPM, the definition of the beta = 1 mirror toys). Rates per hour: muons through the top
-counter plane (all sampled muons) and through the telescope (both counters), at beta = 1 with the cos^2 law and I0 (the
+counter plane (all sampled muons) and through the telescope (both counters), at beta = 1 with the cos^2 law and I0 (as in the
 beta = 1 toys) and with the real momentum spectrum (default parametrisation; the others as weights). Mean +- standard
 deviation over the seeds.
 Aerogel angle in the tile, per seed, from the true emission angles (no ring resolution): plain mean, mean in a window
@@ -640,7 +640,7 @@ def figures(R, run_of, out):
         ax.bar(xx+off+0.1, re[:, 0], 0.2, yerr=re[:, 1], color=C_REAL, alpha=1 if nk == 'tel' else 0.5, label='real, %s' % lab)
     ax.set_yscale('log'); ax.set_xticks(xx); ax.set_xticklabels([r[0] for r in rows], rotation=45, ha='right', fontsize=8)
     ax.set_ylabel('>= 80 % rings per hour'); ax.grid(alpha=.3, axis='y'); ax.legend(fontsize=8, ncol=2)
-    ax.set_title('Expected >= 80 % ring rates per configuration: β = 1 toys vs real momentum spectrum', loc='left', fontsize=10)
+    ax.set_title('Expected >= 80 % ring rates per configuration: β = 1 muons vs real momentum spectrum', loc='left', fontsize=10)
     plt.tight_layout(); save(out, 'cosmic_rates_summary.png', dpi=130, fig=fig); plt.close(fig)
     # rate vs minimum photon count
     fig, ax = plt.subplots(1, 3, figsize=(16, 4.8))

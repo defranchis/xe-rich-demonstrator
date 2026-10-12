@@ -1,4 +1,4 @@
-"""Geometric Monte Carlo models of the demonstrator setups, built on tracer, muons and analysis.
+"""Geometric Monte Carlo models of the pre-demonstrator setups, built on tracer, muons and analysis.
 
 - aberration: exact-sphere imaging of a Cherenkov cone (spherical aberration).
 - ring_rate_full, ring_rate_partial: cosmic gas-ring rates with a flat-mirror footprint.

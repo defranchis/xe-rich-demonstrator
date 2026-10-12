@@ -1126,7 +1126,7 @@ def fig_tir(out, ctx):
         ray(ax, b['pts'][1:], AEROGEL, ls=(0, (5, 3)), lw=1.0, arrows=(0,))
     ev_t = trans[0]['events'][0]; ev_tir = tirs[0]['events'][0]
     note(ax, -26.5, 190.1, 'muon at %.0f° from the vertical' % TILT_DEG, fs=8.5)
-    note(ax, -20.0, 197.4, 'photons at φ = 0 (most horizontal), %.1f° from the vertical:\nincidence %.1f° > critical %.2f° → total internal reflection\n(circle) where they meet a face; most reach the side face\nfirst (bars). The toy absorbs light at the side faces.'
+    note(ax, -20.0, 197.4, 'photons at φ = 0 (most horizontal), %.1f° from the vertical:\nincidence %.1f° > critical %.2f° → total internal reflection\n(circle) where they meet a face; most reach the side face\nfirst (bars). The tracer absorbs light at the side faces.'
          % (np.degrees(ev_tir['inc']), np.degrees(ev_tir['inc']), np.degrees(thcrit)), color='#92400e', fs=8, ha='left')
     note(ax, -9.2, 190.0, 'photons at φ = π: incidence %.1f°, transmitted\n(T = %.4f; reflected branch dashed, R = %s)' % (np.degrees(ev_t['inc']), ev_t['T'], sci(ev_t['R'])),
          color='#b45309', fs=8, ha='left')
@@ -1189,7 +1189,7 @@ def fig_tir(out, ctx):
     cx.grid(alpha=.3)
     cx.set_title('(c) fraction of aerogel photons trapped by TIR', loc='left')
     p = save(out, 'sketch_effects_7_tir.png', dpi=150, fig=fig); plt.close(fig)
-    # side faces (absorbing in the toy) for a vertical track
+    # side faces (absorbing in the tracer) for a vertical track
     inc_side = np.pi/2-tha
     Rs_, Rp_, _, _ = tracer.fresnel_powers(np.cos(inc_side), na, ng)
     crit = {}

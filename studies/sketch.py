@@ -1,4 +1,4 @@
-"""To-scale sketch of the mirror demonstrator with the aerogel tile (arc_xe_demonstrator_sketch.png)."""
+"""To-scale sketch of the mirror pre-demonstrator with the aerogel tile (arc_xe_demonstrator_sketch.png)."""
 from xerich import cli
 from xerich.plotting import save
 from xerich.sketch import draw

@@ -1,6 +1,6 @@
 # xe-rich-demonstrator
 
-Optics toys for a pressurised-xenon RICH demonstrator (ARC / FCC-ee). Xe at 2–3 bar is studied as the gas radiator in place of the C₄F₁₀ baseline, which has a high global-warming potential. [`docs/design_options.md`](docs/design_options.md) summarises every option explored, including commercial mirrors, SiPM, aerogel and cosmic acceptance.
+Fast optical simulation of the pressurised-xenon RICH pre-demonstrator (ARC / FCC-ee), with β = 1 toy models. The fast simulation is the `xerich` 3D-tracer chain; the toy models are the β = 1 geometric drivers (`cosmic_acc*.py`, `toy_*.py`); the full simulation is ARC's Geant4 framework. Xe at 2–3 bar is studied as the gas radiator in place of the C₄F₁₀ baseline, which has a high global-warming potential. [`docs/design_options.md`](docs/design_options.md) summarises every option explored, including commercial mirrors, SiPM, aerogel and cosmic acceptance.
 
 ## Model assumptions and simplifications
 - Xe refractive index (`media.n_xe`, option `model` / `--xe-index`): by default Börzsönyi et al., Appl. Opt. 47, 4856 (2008) (273 K, taken as 273.15 K, and 1000 mbar); `bm1981` selects Bideau-Mehu et al. (1981) (0 °C, 1 atm). Either is scaled with Lorentz–Lorenz and the virial molar density (B ≈ −130 cm³/mol at 293 K; checks in [`docs/design_options.md`](docs/design_options.md) §1.2).

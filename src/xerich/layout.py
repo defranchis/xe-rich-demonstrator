@@ -1,4 +1,4 @@
-"""Geometry parameters of the demonstrator components (lengths in mm)."""
+"""Geometry parameters of the pre-demonstrator components (lengths in mm)."""
 from dataclasses import dataclass
 
 from .constants import AEROGEL_HALF, AEROGEL_T, MIRROR_CLEAR_FRAC, PIXEL_PITCH, T_ROOM, WINDOW_N, WINDOW_T
