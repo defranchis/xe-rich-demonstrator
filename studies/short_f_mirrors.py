@@ -27,11 +27,11 @@ from dataclasses import replace  # noqa: E402
 import numpy as np  # noqa: E402
 from matplotlib.colors import LogNorm, to_rgb  # noqa: E402
 
-from xerich import cli, sim, tracer  # noqa: E402
+from xerich import cli, provenance, sim, tracer  # noqa: E402
 from xerich.analysis import pixel_sigma  # noqa: E402
 from xerich.cherenkov import PhotonSpectrum, qe_arc, qe_band, theta_c  # noqa: E402
 from xerich.constants import (AEROGEL_HALF, AEROGEL_LAMBDA_REF, AEROGEL_N_AIR, AEROGEL_T, HC, MIP_DIRECT_PE,  # noqa: E402
-                              MIRROR_CLEAR_FRAC, MIRROR_SHORT_F, PIXEL_PITCH, PIXEL_PITCH_FINE, SENSOR_HALF_2IN)
+                              MIRROR_CLEAR_FRAC, MIRROR_SHORT_F, P_REF, PIXEL_PITCH, PIXEL_PITCH_FINE, SENSOR_HALF_2IN)
 from xerich.layout import Aerogel, Mirror, Phase1Layout, Sensor, Window  # noqa: E402
 from xerich.media import Medium, ConstantIndex, Rayleigh, aerogel_medium, air, xenon  # noqa: E402
 from xerich.plotting import AEROGEL, GAS, INK, MUTED, SCINT_EDGE, plt, save  # noqa: E402
@@ -42,6 +42,7 @@ MIRROR_KEYS = tuple(MIRRORS)
 GAS_NAMES = ('air', 'xe1', 'xe2', 'xe3')
 GAS_LABEL = {'air': 'air 1 atm', 'xe1': 'Xe 1 bar', 'xe2': 'Xe 2 bar', 'xe3': 'Xe 3 bar'}
 GAS_COLOUR = {'air': '#2a9d8f', 'xe1': '#8ab17d', 'xe2': '#1f6fb4', 'xe3': '#d1495b'}
+REF_GAS = 'xe%g' % P_REF             # Xe at the reference pressure: on-axis figures, sensor-position and tolerance scans
 MIRROR_STYLE = {'43-543': '-', '43-553': '--'}
 ORIGINS = ('gas', 'aerogel', 'window')
 WEIGHTINGS = ('ftqe', 'ft')
@@ -174,6 +175,7 @@ def tally(ph, e, ref_a, ref_g, core_half=CORE_HALF, core_bin=CORE_BIN, onaxis=Fa
     ws = weights_of(ph); org = ph['origin']
     emit = np.array([[w[org == o].sum() for o in range(no)] for w in ws])
     o = org[e['i']].astype(np.intp); we = ws[:, e['i']]*e['w']
+    assert e['reason'].max(initial=0) < nr_                               # no 'mirror absorption' (reflectivity 1)
     key = o*nr_+e['reason']
     reason = np.stack([np.bincount(key, we[k], minlength=no*nr_).reshape(no, nr_) for k in range(2)])
     det = e['reason'] == R_DET
@@ -266,6 +268,7 @@ def run_angle(task):
     i = e['i']; we = wq[i]*e['w']; wf = ws[1, i]*e['w']
     det = e['reason'] == R_DET; dr = e['cls'] == 0
     plane = dr&((e['reason'] == R_DET)|(e['reason'] == R_OUT))
+    assert e['reason'].max(initial=0) < len(REASONS)                      # no 'mirror absorption' (reflectivity 1)
     res['reason'] = np.bincount(e['reason'], we, minlength=len(REASONS))
     res['phi'][0] = np.bincount(ib, wq, minlength=NPHI)
     res['phi'][1] = np.bincount(ib[i[det&dr]], we[det&dr], minlength=NPHI)
@@ -345,14 +348,14 @@ def build_jobs(args, parts, band):
                         core_bin=ZCORE_BIN if t[:2] in ('sp', 'k4') else CORE_BIN)
     if 'zscan' in parts:
         for mk in MIRROR_KEYS:
-            for gn in ('air', 'xe3'):
+            for gn in ('air', REF_GAS):
                 for zi, dz in enumerate(DZ_SCAN):
                     add('zscan', (mk, gn, zi), make_layout(mk, gn, rayleigh=False, dz=dz), args.nphot_zscan, args.seed,
                         core_half=ZCORE_HALF, core_bin=ZCORE_BIN)
     if 'tol' in parts:
         for mk in MIRROR_KEYS:
             f0 = MIRRORS[mk][0]
-            for gn in ('air', 'xe3'):
+            for gn in ('air', REF_GAS):
                 for fi, fs in enumerate(F_SCALE):
                     add('tol', (mk, gn, 'focus', fi), make_layout(mk, gn, rayleigh=False, f_scale=fs), args.nphot_zscan, args.seed,
                         core_half=ZCORE_HALF, core_bin=ZCORE_BIN)
@@ -553,7 +556,7 @@ def fig_onaxis_radial(out, comb, S):
     rc = None
     for j, mk in enumerate(MIRROR_KEYS):
         a = ax[0, j]; rb = 10
-        rad = rebin(comb[(mk, 'xe3')]['radial'][0], rb)/(R_BIN*rb); rc = (np.arange(rad.shape[-1])+0.5)*R_BIN*rb
+        rad = rebin(comb[(mk, REF_GAS)]['radial'][0], rb)/(R_BIN*rb); rc = (np.arange(rad.shape[-1])+0.5)*R_BIN*rb
         for oi, nm, col in ((1, 'aerogel', AEROGEL), (0, 'gas', GAS), (2, 'window', SCINT_EDGE)):
             for gi, (cs, gname) in enumerate(zip(GROUPS, GROUP_NAMES)):
                 y = rad[oi, list(cs)].sum(0)
@@ -563,7 +566,7 @@ def fig_onaxis_radial(out, comb, S):
         a.set_yscale('log'); a.set_xlim(0, R_MAX); a.set_ylim(1e-6, None); a.grid(alpha=.3)
         a.axvline(SENSOR_HALF_2IN, color=MUTED, lw=.8, ls=':')
         a.set_xlabel('radius r on the SiPM plane [mm]'); a.set_ylabel('dN/dr [photons / mm / muon], FT x QE')
-        a.set_title('#%s (f = %.1f mm), Xe 3 bar: all photons on the SiPM, %.1f mm bins' % (mk, MIRRORS[mk][0], R_BIN*rb), fontsize=10)
+        a.set_title('#%s (f = %.1f mm), %s: all photons on the SiPM, %.1f mm bins' % (mk, MIRRORS[mk][0], GAS_LABEL[REF_GAS], R_BIN*rb), fontsize=10)
         a.legend(fontsize=7.5, loc='upper right')
         a = ax[1, j]
         for gn in GAS_NAMES:
@@ -586,20 +589,20 @@ def fig_onaxis_radial(out, comb, S):
 
 
 def fig_onaxis_maps(out, comb, S):
-    """SiPM hit maps (log), Xe 3 bar, both mirrors, with the 3.2 mm pixel grid."""
+    """SiPM hit maps (log), Xe at the reference pressure, both mirrors, with the 3.2 mm pixel grid."""
     fig, ax = plt.subplots(1, 2, figsize=(14, 6.4))
     cmap = plt.get_cmap('magma_r').copy(); cmap.set_bad('white')
     for a, mk in zip(ax, MIRROR_KEYS):
-        m = comb[(mk, 'xe3')]['map'].sum((0, 1))/MAP_BIN**2
+        m = comb[(mk, REF_GAS)]['map'].sum((0, 1))/MAP_BIN**2
         im = a.imshow(np.ma.masked_less_equal(m.T, 0), origin='lower', extent=(-SENSOR_HALF_2IN, SENSOR_HALF_2IN)*2,
                       norm=LogNorm(m.max()*1e-6, m.max()), cmap=cmap, interpolation='nearest')
         for g in np.arange(-8, 9)*PIXEL_PITCH:
             a.axvline(g, color=MUTED, lw=0.3, alpha=0.5); a.axhline(g, color=MUTED, lw=0.3, alpha=0.5)
         a.set_xlim(-SENSOR_HALF_2IN, SENSOR_HALF_2IN); a.set_ylim(-SENSOR_HALF_2IN, SENSOR_HALF_2IN)
         a.set_xlabel('x [mm]'); a.set_ylabel('y [mm]'); a.set_aspect('equal')
-        d = S['%s_xe3' % mk]
-        a.set_title('#%s, Xe 3 bar: aerogel ring r = %.2f mm, gas ring r = %.2f mm,\nwindow cluster r < %.2f mm; grid = 3.2 mm pixels'
-                    % (mk, d['ftqe']['aero_r_mean'], d['ftqe']['gas_r_mean'], d['window_r_max']), fontsize=10)
+        d = S['%s_%s' % (mk, REF_GAS)]
+        a.set_title('#%s, %s: aerogel ring r = %.2f mm, gas ring r = %.2f mm,\nwindow cluster r < %.2f mm; grid = 3.2 mm pixels'
+                    % (mk, GAS_LABEL[REF_GAS], d['ftqe']['aero_r_mean'], d['ftqe']['gas_r_mean'], d['window_r_max']), fontsize=10)
         fig.colorbar(im, ax=a, fraction=0.046, pad=0.03, label='photons / mm² / muon (FT x QE)')
     fig.suptitle('SiPM hit density, vertical on-axis muon, all origins and paths (log scale, %.1f mm bins)' % MAP_BIN, fontsize=12, color=INK)
     plt.tight_layout(rect=(0, 0, 1, 0.95))
@@ -617,11 +620,11 @@ def fig_gas_ring(out, comb, S):
             a.step(rc, np.where(y > 0, y, np.nan), where='mid', color=GAS_COLOUR[gn], lw=1.3,
                    label='%s gas photons (%.2f / muon, <r> %.2f mm)' % (GAS_LABEL[gn], S['%s_%s' % (mk, gn)]['ftqe']['gas_sipm_all'],
                                                                      S['%s_%s' % (mk, gn)]['ftqe']['gas_r_mean']))
-        rad = comb[(mk, 'xe3')]['radial'][0]/R_BIN
+        rad = comb[(mk, REF_GAS)]['radial'][0]/R_BIN
         y = rad[2].sum(0); a.step(rc, np.where(y > 0, y, np.nan), where='mid', color=SCINT_EDGE, lw=1.3,
-                                  label="window cluster (%.1f / muon + %g cell)" % (S['%s_xe3' % mk]['window_n'], MIP_DIRECT_PE))
+                                  label="window cluster (%.1f / muon + %g cell)" % (S['%s_%s' % (mk, REF_GAS)]['window_n'], MIP_DIRECT_PE))
         y = rad[1].sum(0); a.step(rc, np.where(y > 0, y, np.nan), where='mid', color=AEROGEL, lw=1.0,
-                                  label='aerogel photons, all paths (Xe 3 bar)')
+                                  label='aerogel photons, all paths (%s)' % GAS_LABEL[REF_GAS])
         for k in range(1, 5):
             a.axvline(k*PIXEL_PITCH, color=MUTED, lw=.6, ls=':')
         a.set_yscale('log'); a.set_xlim(0, 8); a.set_ylim(1e-5, None); a.grid(alpha=.3)
@@ -629,7 +632,7 @@ def fig_gas_ring(out, comb, S):
         a.set_title('#%s: centre region, %.2f mm bins' % (mk, R_BIN), fontsize=10); a.legend(fontsize=7)
         for pi, p in enumerate(PITCHES):
             a = ax[j, 1+pi]
-            hist = comb[(mk, 'xe3')]['pix%d' % pi][:, 0, 0]               # phase 0: pixel corner at the impact point
+            hist = comb[(mk, REF_GAS)]['pix%d' % pi][:, 0, 0]               # phase 0: pixel corner at the impact point
             W = p*np.ceil(PIX_WIN/p); npx = hist.shape[-1]
             tot = hist.sum(0); tmax = tot.max()
             rgb = np.array([to_rgb(GAS), to_rgb(AEROGEL), to_rgb(SCINT_EDGE)])
@@ -641,11 +644,11 @@ def fig_gas_ring(out, comb, S):
                     a.text(x0+p/2, y0+p/2, '%.2f' % tot[ix, iy], ha='center', va='center', fontsize=6.5, color=INK)
             for k in range(npx+1):
                 a.axvline(-W+k*p, color=MUTED, lw=0.3); a.axhline(-W+k*p, color=MUTED, lw=0.3)
-            d = S['%s_xe3' % mk]['pix%g' % p]
+            d = S['%s_%s' % (mk, REF_GAS)]['pix%g' % p]
             a.set_xlim(-PIX_WIN, PIX_WIN); a.set_ylim(-PIX_WIN, PIX_WIN); a.set_aspect('equal')
             a.set_xlabel('x [mm]'); a.set_ylabel('y [mm]')
-            a.set_title('#%s, Xe 3 bar, %.1f mm pixels, corner at the impact point\ngas light outside window pixels: %.0f %% (mean over grid phases)'
-                        % (mk, p, 100*d['gas_frac_clear']), fontsize=9)
+            a.set_title('#%s, %s, %.1f mm pixels, corner at the impact point\ngas light outside window pixels: %.0f %% (mean over grid phases)'
+                        % (mk, GAS_LABEL[REF_GAS], p, 100*d['gas_frac_clear']), fontsize=9)
     fig.suptitle('Small Xe gas ring vs the muon\'s own window cluster (vertical on-axis muon, FT x QE; pixel colour: blue gas, green window, '
                  'orange aerogel; numbers: photons per muon per 3.2 mm pixel)',
                  fontsize=12, color=INK)
@@ -717,7 +720,7 @@ def fig_terms(out, S, dep):
     xs = np.arange(len(terms)); wbar = 0.1
     k = 0
     for mk in MIRROR_KEYS:
-        for gn in ('air', 'xe3'):
+        for gn in ('air', REF_GAS):
             v = [1e3*S['%s_%s' % (mk, gn)][t]['aero_r_rms'] for t, _ in terms]
             a.bar(xs+(k-1.5)*wbar*1.1, np.maximum(v, 1e-3), wbar, color=GAS_COLOUR[gn], alpha=1 if mk == '43-543' else 0.5,
                   edgecolor=INK, lw=0.3, hatch='' if mk == '43-543' else '//', label='#%s, %s' % (mk, GAS_LABEL[gn]))
@@ -737,7 +740,7 @@ def analyse_zscan(out, acc, args, summary):
     S['dz_mm'] = DZ_SCAN.tolist()
     dep = (np.arange(400)+0.5)/400
     for mk in MIRROR_KEYS:
-        for gn in ('air', 'xe3'):
+        for gn in ('air', REF_GAS):
             res = {q: [] for q in ('aero_r_mean', 'aero_r_rms', 'aero_fwhm', 'aero_hw68', 'gas_r_mean', 'gas_r_rms', 'gas_hw68',
                                    'det_r_mean', 'det_r_rms', 'aero_direct_n')}
             for zi, dz in enumerate(DZ_SCAN):
@@ -750,20 +753,20 @@ def analyse_zscan(out, acc, args, summary):
             S['%s_%s' % (mk, gn)] = res
     fig, ax = plt.subplots(1, 3, figsize=(18, 5.4))
     for mk in MIRROR_KEYS:
-        for gn in ('air', 'xe3'):
+        for gn in ('air', REF_GAS):
             r = S['%s_%s' % (mk, gn)]; ls = MIRROR_STYLE[mk]; col = GAS_COLOUR[gn]
             ax[0].plot(DZ_SCAN, 1e3*np.array(r['aero_r_rms']), ls=ls, color=col, marker='o', ms=3, label='#%s, %s (MC rms)' % (mk, GAS_LABEL[gn]))
             ax[0].plot(DZ_SCAN, 1e3*np.array(r['aero_fwhm'])/2.355, ls=ls, color=col, lw=0.7, alpha=0.6)
             ax[1].plot(DZ_SCAN, np.array(r['aero_r_mean'])-r['aero_r_mean'][len(DZ_SCAN)//2], ls=ls, color=col, marker='o', ms=3,
                        label='#%s, %s' % (mk, GAS_LABEL[gn]))
-            if gn == 'xe3':
-                ax[2].plot(DZ_SCAN, 1e3*np.array(r['gas_r_rms']), ls=ls, color=col, marker='o', ms=3, label='#%s, Xe 3 bar gas ring rms' % mk)
+            if gn == REF_GAS:
+                ax[2].plot(DZ_SCAN, 1e3*np.array(r['gas_r_rms']), ls=ls, color=col, marker='o', ms=3, label='#%s, %s gas ring rms' % (mk, GAS_LABEL[REF_GAS]))
     ax[0].set_ylabel('aerogel direct-ring width [um] (markers: rms; thin: FWHM/2.355)'); ax[0].set_yscale('log')
     ax[1].set_ylabel('<r>(dz) - <r>(0) [mm]'); ax[2].set_ylabel('gas direct-ring rms [um]')
     for a in ax:
         a.set_xlabel('sensor and tile displacement from z = f [mm] (+: away from the mirror)'); a.grid(alpha=.3); a.legend(fontsize=8)
     ax[0].set_title('Aerogel ring width vs sensor position (Rayleigh off)', fontsize=10)
-    ax[1].set_title('Aerogel ring radius vs sensor position', fontsize=10); ax[2].set_title('Xe 3 bar gas ring width', fontsize=10)
+    ax[1].set_title('Aerogel ring radius vs sensor position', fontsize=10); ax[2].set_title('%s gas ring width' % GAS_LABEL[REF_GAS], fontsize=10)
     fig.suptitle('Sensor-position scan (tile kept 1 mm below the SiPM)', fontsize=12, color=INK)
     plt.tight_layout(rect=(0, 0, 1, 0.94))
     save(out, 'short_f_zscan.png', dpi=120, fig=fig); plt.close(fig)
@@ -773,7 +776,7 @@ def analyse_tol(out, acc, args, summary):
     S = summary.setdefault('tol', {}); S['N'] = dict(photons_per_origin=int(np.ceil(args.nphot_zscan/args.chunk))*args.chunk)
     S['f_scale'] = list(F_SCALE)
     for mk in MIRROR_KEYS:
-        for gn in ('air', 'xe3'):
+        for gn in ('air', REF_GAS):
             d = {}
             for mode in ('focus', 'nominal'):
                 d[mode] = []
@@ -810,7 +813,7 @@ def analyse_angles(out, res, args, summary):
     arc = on_b.mean(-1)
     arc[np.isnan(emit)|(emit <= 0)] = np.nan
     rel = f_det/f_det[:, :, ic, 0, 0, 0, i0][:, :, None, None, None, None, None]
-    np.savez(out/'short_f_angles.npz', mirror=np.array(MIRROR_KEYS), mirror_f_mm=np.array([MIRRORS[k][0] for k in MIRROR_KEYS]),
+    np.savez(out/'short_f_angles.npz', **provenance.npz(), mirror=np.array(MIRROR_KEYS), mirror_f_mm=np.array([MIRRORS[k][0] for k in MIRROR_KEYS]),
              gas=np.array(GAS_NAMES), clear_frac=np.array(CLEAR_SCAN), azimuth_deg=np.array(AZIMUTH), offset_dir=np.array(OFFSET_DIRS),
              zenith_deg=ZENITH, offset_mm=OFFSET, stats=st, phi=phi, reasons_w=rs, reasons=np.array(REASONS), entry_xy_mm=p0,
              f_det=f_det, f_direct=f_dir, f_mirror_aperture=f_mirror, f_outside_sensor=f_out, f_tile_sides=f_sides, arc_frac=arc,
@@ -941,12 +944,12 @@ def save_acc(out, part, acc):
         tag = '|'.join(str(k) for k in key)
         for q, v in a.items():
             flat['%s|%s' % (tag, q)] = v
-    np.savez_compressed(out/('short_f_%s.npz' % part), **flat)
+    np.savez_compressed(out/('short_f_%s.npz' % part), **flat, **provenance.npz())
 
 
 def load_acc(path, nkey):
     z = np.load(path, allow_pickle=False); acc = {}
-    for name in z.files:
+    for name in [n for n in z.files if n != provenance.KEY]:
         parts = name.split('|'); key = tuple(int(p) if p.lstrip('-').isdigit() else p for p in parts[:nkey]); q = parts[nkey]
         acc.setdefault(key, {})[q] = z[name]
     return acc
@@ -1001,7 +1004,7 @@ def main():
             for key, r in accs['angles'].items():
                 for q, v in r.items():
                     flat['%s|%s' % ('|'.join(str(k) for k in key), q)] = v
-            np.savez_compressed(out/'short_f_angles_raw.npz', **flat)
+            np.savez_compressed(out/'short_f_angles_raw.npz', **flat, **provenance.npz())
     else:
         accs = {}
         for pt in parts:
@@ -1025,7 +1028,7 @@ def main():
         analyse_tol(out, acc, args, summary)
     if 'angles' in parts:
         analyse_angles(out, accs['angles'], args, summary)
-    sp.write_text(json.dumps(to_jsonable(summary), indent=1))
+    sp.write_text(json.dumps(to_jsonable(provenance.with_record(summary)), indent=1))
     print('summary: %s; total wall time %.1f s' % (sp, time.time()-t0))
 
 

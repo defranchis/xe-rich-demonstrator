@@ -19,7 +19,7 @@ import time  # noqa: E402
 import numpy as np  # noqa: E402
 from matplotlib.colors import LogNorm  # noqa: E402
 
-from xerich import cli, sim  # noqa: E402
+from xerich import cli, provenance, sim  # noqa: E402
 from xerich.analysis import SCATTER_LAM_EDGES, scattered_fraction  # noqa: E402
 from xerich.cherenkov import PhotonSpectrum, qe_arc, qe_band  # noqa: E402
 from xerich.constants import (AEROGEL_HALF, AEROGEL_LAMBDA_REF, AEROGEL_N_AIR, AEROGEL_SURFACE_A, AEROGEL_T, HC,  # noqa: E402
@@ -70,6 +70,7 @@ def run_chunk(task):
     wsets = np.stack([w0*qe, w0])                                     # (weighting, photon)
     emit = np.array([[np.sum(ws[org == o]) for o in range(no)] for ws in wsets])
     o = org[e['i']].astype(np.intp); we = wsets[:, e['i']]*e['w']                     # (weighting, branch)
+    assert lay.mirror.reflectivity is None   # 'mirror absorption' (index len(REASONS)) would overflow the reason keys
     reason = np.zeros((2, no, len(REASONS)))
     key = o*len(REASONS)+e['reason']
     for k in range(2):
@@ -316,7 +317,7 @@ def write_tables(out, summ, labels):
             md.append(case(r) + '%.3g | %.3g | %.3f | %.3f |' % (
                 r[col['emitted_window']], sum(r[col['sipm_window_%s' % c]] for c in CLASSES),
                 r[col['window_spot_r_mean_mm']], r[col['window_spot_r_rms_mm']]))
-    (out/'hitmap_onaxis_summary.md').write_text('\n'.join(md)+'\n')
+    (out/'hitmap_onaxis_summary.md').write_text(provenance.md_line()+'\n\n'+'\n'.join(md)+'\n')
     return md
 
 
@@ -436,7 +437,7 @@ def main():
     md = write_tables(out, summ, labels)
     print('\n'+'\n'.join(md))
     edges = np.arange(nb+1)*MAP_BIN-SENSOR_HALF_2IN
-    np.savez(out/'hitmap_onaxis.npz', map_edges=edges, r_edges=np.arange(int(round(R_MAX/R_BIN))+1)*R_BIN,
+    np.savez(out/'hitmap_onaxis.npz', **provenance.npz(), map_edges=edges, r_edges=np.arange(int(round(R_MAX/R_BIN))+1)*R_BIN,
              origins=np.array(ORIGINS), classes=np.array(CLASSES), reasons=np.array(REASONS), **npz)
     figs = []
     for gi, (name, gas) in enumerate(GASES):

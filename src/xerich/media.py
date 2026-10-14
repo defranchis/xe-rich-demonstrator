@@ -12,6 +12,7 @@ from .constants import (AEROGEL_LAMBDA_REF, AEROGEL_N_AIR, AEROGEL_POLE_NM, AERO
 B_XE_293 = -130.0            # [cm^3/mol]
 B_XE_SLOPE = 0.9             # [cm^3 mol^-1 K^-1]
 B_XE_TREF = 293.15           # reference temperature of the B(T) parametrisation [K]
+B_SMALL = 1e-7               # |B| [m^3/mol] below which molar_density uses its cancellation-free root
 
 # C4F10 index vs photon energy [eV], RINDEX__C4F10_PFRICH of the ARC simulation:
 # k4geo e1ba7bc, FCCee/CLD/compact/CLD_o3_v01/materials_arc_o1_v01.xml:40
@@ -51,9 +52,17 @@ def B_virial(T):
 
 
 def molar_density(P, T):
-    """Molar density [mol/m^3] solving P = rho R T (1 + B rho); P in Pa, T in K."""
+    """Molar density [mol/m^3] solving P = rho R T (1 + B rho); P in Pa, T in K (scalars or arrays, element-wise).
+
+    Where |B| < B_SMALL the root is taken as 2 P/(b + sqrt(b^2 + 4 a P)), which has no cancellation as B -> 0 (P/(R T) at
+    B = 0); elsewhere as (-b + sqrt(b^2 + 4 a P))/(2 a).
+    """
     B = B_virial(T); a = B*R_GAS*T; b = R_GAS*T
-    return (-b+np.sqrt(b*b+4*a*P))/(2*a) if a != 0 else P/b
+    small = np.abs(B) < B_SMALL
+    if np.ndim(a) == 0:
+        return (-b+np.sqrt(b*b+4*a*P))/(2*a) if not small else 2*P/(b+np.sqrt(b*b+4*a*P))
+    with np.errstate(divide='ignore', invalid='ignore'):
+        return np.where(small, 2*P/(b+np.sqrt(b*b+4*a*P)), (-b+np.sqrt(b*b+4*a*P))/(2*a))
 
 
 RHO0 = P0/(R_GAS*T0)*(1/(1+B_virial(T0)*P0/(R_GAS*T0)))   # density of the Sellmeier reference state [mol/m^3]

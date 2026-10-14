@@ -1,4 +1,4 @@
-"""Spherical-aberration smearing of the reconstructed Cherenkov angle vs track offset and tilt (stdout)."""
+"""Spherical-aberration smearing of the reconstructed Cherenkov angle vs track offset and tilt, Xe at --pressure (stdout)."""
 import numpy as np
 
 from xerich import cli
@@ -7,12 +7,11 @@ from xerich.layout import Mirror
 from xerich.sim import aberration
 
 L = 200.0                    # radiator length [mm]
-P_BAR = 3.0
 
 
 def main():
-    args = cli.thc(cli.xe_index(cli.parser(__doc__))).parse_args()
-    thc = cli.thc_value(args, P_BAR)
+    args = cli.pressure(cli.thc(cli.xe_index(cli.parser(__doc__)))).parse_args()
+    thc = cli.thc_value(args, args.pressure)
     rng = np.random.default_rng(1)
     mirror = Mirror(MIRROR_R)
     print('h0[mm] tilt[deg]  max mirror radius used [mm]   <theta> [mrad]   rms spread [mrad]')

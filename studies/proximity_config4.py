@@ -14,7 +14,8 @@ lies on that plane; a window below a downward-facing sensor is not handled (its 
 
 Parts (--parts):
   onaxis   vertical muon through the tile centre, --nseeds matched master seeds, every gas, gap and pore variant;
-           plus vertical muons at a few impact points (variant off);
+           plus the points part;
+  points   vertical muons at a few impact points (variant off; POINT_GASES), alone: --replot --parts onaxis then redraws;
   terms    ring-width terms switched one at a time at matched seeds, deterministic r(depth), dr/dtheta, dr/dn;
   angles   containment vs zenith, muon azimuth and impact offset at the tile mid-plane (all gases, gaps, variants).
 Outputs in --outdir: prox_<part>.npz, prox_angles.npz (explicit axes), prox_summary.json, prox_*.png, prox_*.csv;
@@ -32,11 +33,11 @@ from dataclasses import dataclass  # noqa: E402
 import numpy as np  # noqa: E402
 from matplotlib.colors import LogNorm, to_rgb  # noqa: E402
 
-from xerich import cli, sim, tracer  # noqa: E402
+from xerich import cli, provenance, sim, tracer  # noqa: E402
 from xerich.cherenkov import PhotonSpectrum, qe_arc, qe_band, theta_c  # noqa: E402
 from xerich.constants import (AEROGEL_HALF, AEROGEL_LAMBDA_REF, AEROGEL_N_AIR, AEROGEL_POROSITY, AEROGEL_POROSITY_AIRREF,  # noqa: E402
                               AEROGEL_T, HC, MIP_DIRECT_PE, PIXEL_PITCH, PIXEL_PITCH_FINE, RAYLEIGH_C_AEROGEL, SENSOR_HALF_2IN,
-                              WINDOW_N, WINDOW_T)
+                              P_REF, WINDOW_N, WINDOW_T)
 from xerich.layout import Aerogel, Sensor, Window  # noqa: E402
 from xerich.media import (N_AIR, ConstantIndex, Medium, Rayleigh, aerogel_index, aerogel_index_air, aerogel_medium,  # noqa: E402
                           air, xenon)
@@ -47,6 +48,8 @@ GAPS = (30.0, 50.0, 70.0)                 # tile exit face to silicon [mm]
 GAS_NAMES = ('air', 'xe1', 'xe2', 'xe3')
 GAS_LABEL = {'air': 'air 1 atm', 'xe1': 'Xe 1 bar', 'xe2': 'Xe 2 bar', 'xe3': 'Xe 3 bar'}
 GAS_COLOUR = {'air': '#2a9d8f', 'xe1': '#8ab17d', 'xe2': '#1f6fb4', 'xe3': '#d1495b'}
+REF_GAS = 'xe%g' % P_REF             # Xe at the reference pressure: on-axis figures, rings needed, terms figure
+POINT_GASES = ('air', REF_GAS)        # gases of the off-centre impact points
 GAP_STYLE = {30.0: '-', 50.0: '--', 70.0: ':'}
 GAP_COLOUR = {30.0: '#1f6fb4', 50.0: '#d97706', 70.0: '#6d597a'}
 VARIANTS = ('off', 'vac', 'air')
@@ -142,20 +145,20 @@ def prox_segments(lay, p0, u):
 def check_segments():
     """Segments against hand calculations; raises on mismatch. Returns the cases."""
     lay = make_layout('air', 50.0)
-    out = []
+    out = []; zw = 60.0-lay.window.thickness                              # window bottom face (sensor plane at 60 mm)
     seg = prox_segments(lay, (0, 0, 0), (0, 0, 1.0))                      # vertical, centre
-    exp = dict(tile=[(0.0, 10.0)], gas=[(10.0, 59.7)], window=[(59.7, 60.0)])
+    exp = dict(tile=[(0.0, 10.0)], gas=[(10.0, zw)], window=[(zw, 60.0)])
     out.append(('vertical centre, g = 50', seg, exp))
-    c1 = np.cos(np.radians(10)); s1 = np.sin(np.radians(10))              # 10 deg along x: window entry at x = 59.7 tan10 = 10.5
+    c1 = np.cos(np.radians(10)); s1 = np.sin(np.radians(10))              # 10 deg along x: window entry at x = zw tan10 = 10.5
     seg2 = prox_segments(lay, (0, 0, 0), (s1, 0, c1))
-    exp2 = dict(tile=[(0.0, 10/c1)], gas=[(10/c1, 59.7/c1)], window=[(59.7/c1, 60/c1)])
+    exp2 = dict(tile=[(0.0, 10/c1)], gas=[(10/c1, zw/c1)], window=[(zw/c1, 60/c1)])
     out.append(('10 deg along x from the centre', seg2, exp2))
     c = np.cos(np.radians(30)); s_ = np.sin(np.radians(30))               # 30 deg: window plane reached at x = 34.5, off the sensor
     seg2b = prox_segments(lay, (0, 0, 0), (s_, 0, c))
     exp2b = dict(tile=[(0.0, 10/c)], gas=[(10/c, 60/c)], window=[])
     out.append(('30 deg along x from the centre (misses the window)', seg2b, exp2b))
     seg3 = prox_segments(lay, (20.0, 0, 0), (s_, 0, c))                    # exits the tile side at x = 25: s = 5/sin30 = 10
-    exp3 = dict(tile=[(0.0, 10.0)], gas=[(10.0, 60/c)], window=[])        # window entry at x = 20 + 59.7 tan30 = 54.5: outside
+    exp3 = dict(tile=[(0.0, 10.0)], gas=[(10.0, 60/c)], window=[])        # window entry at x = 20 + zw tan30 = 54.6: outside
     out.append(('30 deg along x from x = 20 (leaves through the tile side)', seg3, exp3))
     for name, seg, exp in out:
         for k in ('tile', 'gas', 'window'):
@@ -221,7 +224,9 @@ def trace_track(lay, rng, p0, u, spectra, n_gas, n_tile, n_win, depth=None, max_
     if not parts:
         return None, None, seg
     p, d, lam, E, org, reg = (np.concatenate(x) for x in zip(*parts))
-    ends = tracer.trace(lay.scene(), p, d, lam, reg, E, max_refl, rng=rng)
+    sc = lay.scene()
+    assert sc.mirror is None or sc.mirror.reflectivity is None   # index len(REASONS) is 'window sides' here, not 'mirror absorption'
+    ends = tracer.trace(sc, p, d, lam, reg, E, max_refl, rng=rng)
     xr = ends['reason'].astype(np.int8).copy()
     xr[(xr == R_SIDE)&(ends['p'][:, 2] > lay.tile_t+1e-6)] = len(REASONS)        # side face of the window, not of the tile
     ends['xreason'] = xr
@@ -467,8 +472,9 @@ def build_jobs(args, parts, band):
                     for g in GAPS:
                         add('onaxis', (vn, gn, g, s), make_layout(gn, g, vn), args.nphot, args.seed+s, onaxis=True,
                             maps=(s == 0 and vn == 'off'))
+    if 'onaxis' in parts or 'points' in parts:
         for pi, xy in enumerate(POINTS):
-            for gn in ('air', 'xe3'):
+            for gn in POINT_GASES:
                 for g in GAPS:
                     add('points', ('off', gn, g, pi), make_layout(gn, g), args.nphot_points, args.seed, xy=xy, maps=True)
     if 'terms' in parts:
@@ -679,8 +685,8 @@ def analyse_onaxis(out, acc, nseeds, args, summary, accp):
                        pix_rms_mm=px['aero_r_pix_rms'][1], pix_phase_std_mm=px['aero_r_pix_mean'][3])
             row['rings_for_10um'] = float(var1/0.010**2)
             for vn in VARIANTS:
-                dlt = D['%s_xe3_%g' % (vn, g)]['mean']
-                row['rings_5sigma_xe3_%s' % vn] = float(2*var1*(5/dlt)**2) if dlt != 0 else np.inf
+                dlt = D['%s_%s_%g' % (vn, REF_GAS, g)]['mean']
+                row['rings_5sigma_%s_%s' % (REF_GAS, vn)] = float(2*var1*(5/dlt)**2) if dlt != 0 else np.inf
             R['%g_%g' % (g, p)] = row
     fig_onaxis_radial(out, comb, S)
     fig_maps(out, comb, accp, S)
@@ -703,7 +709,7 @@ def fig_onaxis_radial(out, comb, S):
     fig, ax = plt.subplots(2, 3, figsize=(18, 10))
     for j, g in enumerate(GAPS):
         a = ax[0, j]; rb = 10
-        rad = rebin(comb[('off', 'xe3', g)]['radial'][0], rb)/(R_BIN*rb); rc = (np.arange(rad.shape[-1])+0.5)*R_BIN*rb
+        rad = rebin(comb[('off', REF_GAS, g)]['radial'][0], rb)/(R_BIN*rb); rc = (np.arange(rad.shape[-1])+0.5)*R_BIN*rb
         for oi, nm, col in ((1, 'aerogel', AEROGEL), (0, 'gap gas', GAS), (2, 'window', SCINT_EDGE)):
             for gi, (cs, gname) in enumerate(zip(GROUPS, GROUP_NAMES)):
                 y = rad[oi, list(cs)].sum(0)
@@ -713,11 +719,11 @@ def fig_onaxis_radial(out, comb, S):
         a.set_yscale('log'); a.set_xlim(0, R_MAX); a.set_ylim(1e-4, None); a.grid(alpha=.3)
         a.axvline(SENSOR_HALF_2IN, color=MUTED, lw=.8, ls=':')
         a.set_xlabel('distance r from the muon impact point [mm] (dotted: sensor half side)'); a.set_ylabel('dN/dr [photons / mm / muon], FT x QE')
-        a.set_title('gap %g mm, Xe 3 bar, pore shift off: all photons on the SiPM, %.1f mm bins' % (g, R_BIN*rb), fontsize=10)
+        a.set_title('gap %g mm, %s, pore shift off: all photons on the SiPM, %.1f mm bins' % (g, GAS_LABEL[REF_GAS], R_BIN*rb), fontsize=10)
         a.legend(fontsize=7, loc='upper right')
         a = ax[1, j]; rb = 25; bw = CORE_BIN*rb
         for vn, ls in (('off', '-'), ('vac', '--'), ('air', ':')):
-            for gn in (GAS_NAMES if vn == 'off' else ('xe3',)):
+            for gn in (GAS_NAMES if vn == 'off' else (REF_GAS,)):
                 d = S['%s_%s_%g' % (vn, gn, g)]; ca = comb[(vn, gn, g)]['core_a'][0, 1]
                 h = rebin(ca, rb); xc = d['det']['r_mean']-CORE_HALF+(np.arange(len(h))+0.5)*bw
                 a.step(xc, h/bw, where='mid', color=GAS_COLOUR[gn], ls=ls, lw=1.2,
@@ -736,9 +742,9 @@ def fig_onaxis_radial(out, comb, S):
 def fig_maps(out, comb, accp, S):
     fig, ax = plt.subplots(2, 3, figsize=(17, 11))
     cmap = plt.get_cmap('magma_r').copy(); cmap.set_bad('white')
-    panels = [(comb[('off', 'xe3', g)]['map'], 'gap %g mm, impact (0, 0)' % g, (0, 0)) for g in GAPS]
+    panels = [(comb[('off', REF_GAS, g)]['map'], 'gap %g mm, impact (0, 0)' % g, (0, 0)) for g in GAPS]
     for pi in (0, 1, 3):
-        a_ = accp[('off', 'xe3', 50.0, pi)]
+        a_ = accp[('off', REF_GAS, 50.0, pi)]
         panels.append((a_['map']/a_['nchunk'], 'gap 50 mm, impact (%g, %g) mm' % POINTS[pi], POINTS[pi]))
     for a, (m, title, xy) in zip(ax.ravel(), panels):
         m = m.sum((0, 1))/MAP_BIN**2
@@ -750,7 +756,7 @@ def fig_maps(out, comb, accp, S):
                color=AEROGEL, lw=0.8, ls='--')
         a.plot(*xy, '+', color=INK, ms=8)
         a.set_xlim(-SENSOR_HALF_2IN, SENSOR_HALF_2IN); a.set_ylim(-SENSOR_HALF_2IN, SENSOR_HALF_2IN); a.set_aspect('equal')
-        a.set_xlabel('x [mm]'); a.set_ylabel('y [mm]'); a.set_title('Xe 3 bar, %s' % title, fontsize=10)
+        a.set_xlabel('x [mm]'); a.set_ylabel('y [mm]'); a.set_title('%s, %s' % (GAS_LABEL[REF_GAS], title), fontsize=10)
         fig.colorbar(im, ax=a, fraction=0.046, pad=0.03, label='photons / mm² / muon')
     fig.suptitle('SiPM hit density, vertical muons, all origins and paths, FT x QE (log; grid: 3.2 mm pixels; dashed: tile outline; +: impact point)',
                  fontsize=12, color=INK)
@@ -769,17 +775,17 @@ def fig_centre(out, comb, S):
             a.step(rr, np.where(y > 0, y, np.nan), where='mid', color=GAS_COLOUR[gn], lw=1.2,
                    label='%s gap-gas light (%.2f / muon, r < %.2f mm)' % (GAS_LABEL[gn], S['off_%s_%g' % (gn, g)]['ftqe']['gas_sipm_all'],
                                                                          S['off_%s_%g' % (gn, g)]['ftqe']['gas_r_max']))
-        rad = rebin(comb[('off', 'xe3', g)]['radial'][0], rb)/(R_BIN*rb)
+        rad = rebin(comb[('off', REF_GAS, g)]['radial'][0], rb)/(R_BIN*rb)
         y = rad[2].sum(0); a.step(rr, np.where(y > 0, y, np.nan), where='mid', color=SCINT_EDGE, lw=1.4,
-                                  label='window cluster (%.1f / muon + %g cell)' % (S['off_xe3_%g' % g]['window_n'], MIP_DIRECT_PE))
-        y = rad[1].sum(0); a.step(rr, np.where(y > 0, y, np.nan), where='mid', color=AEROGEL, lw=1.0, label='aerogel, all paths (Xe 3 bar)')
+                                  label='window cluster (%.1f / muon + %g cell)' % (S['off_%s_%g' % (REF_GAS, g)]['window_n'], MIP_DIRECT_PE))
+        y = rad[1].sum(0); a.step(rr, np.where(y > 0, y, np.nan), where='mid', color=AEROGEL, lw=1.0, label='aerogel, all paths (%s)' % GAS_LABEL[REF_GAS])
         for k in range(1, 8):
             a.axvline(k*PIXEL_PITCH, color=MUTED, lw=.5, ls=':')
         a.set_yscale('log'); a.set_xlim(0, 25); a.set_ylim(1e-3, None); a.grid(alpha=.3)
         a.set_xlabel('r from the impact point [mm] (dotted: multiples of 3.2 mm)'); a.set_ylabel('dN/dr [photons / mm / muon]')
         a.set_title('gap %g mm: centre region, %.2f mm bins' % (g, R_BIN*rb), fontsize=10); a.legend(fontsize=6.5)
         a = ax[1, j]
-        pf = comb[('off', 'xe3', g)]['pixfull'][0]        # pixel corner at the impact point
+        pf = comb[('off', REF_GAS, g)]['pixfull'][0]        # pixel corner at the impact point
         tot = pf.sum(0); tmax = tot.max(); rgb = np.array([to_rgb(GAS), to_rgb(AEROGEL), to_rgb(SCINT_EDGE)])
         h0 = NPIX_FULL//2*PIXEL_PITCH
         for ix, iy in zip(*np.nonzero(tot > 1e-3)):
@@ -791,7 +797,7 @@ def fig_centre(out, comb, S):
         for k in range(NPIX_FULL+1):
             a.axvline(-h0+k*PIXEL_PITCH, color=MUTED, lw=0.3); a.axhline(-h0+k*PIXEL_PITCH, color=MUTED, lw=0.3)
         a.set_xlim(-h0, h0); a.set_ylim(-h0, h0); a.set_aspect('equal'); a.set_xlabel('x [mm]'); a.set_ylabel('y [mm]')
-        a.set_title('gap %g mm, Xe 3 bar, 3.2 mm pixels, corner at the impact point\n(photons per muon per pixel, shown if > 0.05)' % g, fontsize=9)
+        a.set_title('gap %g mm, %s, 3.2 mm pixels, corner at the impact point\n(photons per muon per pixel, shown if > 0.05)' % (g, GAS_LABEL[REF_GAS]), fontsize=9)
     fig.suptitle("The muon's own hit (window light), the gap-gas light and the aerogel ring (vertical muon, FT x QE; pixel colour: blue gap gas, "
                  "green window, orange aerogel)", fontsize=12, color=INK)
     plt.tight_layout(rect=(0, 0, 1, 0.95))
@@ -818,11 +824,11 @@ def fig_signal(out, S):
     for g in GAPS:
         for p, ls in zip(PITCHES, ('-', '--')):
             r = R['%g_%g' % (g, p)]
-            a.bar(GAPS.index(g)*4+PITCHES.index(p)*2+np.array([0, 0.9]), [r['rings_5sigma_xe3_vac'], r['rings_5sigma_xe3_air']], 0.85,
+            a.bar(GAPS.index(g)*4+PITCHES.index(p)*2+np.array([0, 0.9]), [r['rings_5sigma_%s_vac' % REF_GAS], r['rings_5sigma_%s_air' % REF_GAS]], 0.85,
                   color=[GAS_COLOUR['xe2'], GAS_COLOUR['xe3']], edgecolor=INK, lw=0.4, alpha=1 if p == PIXEL_PITCH else 0.55)
     a.set_xticks([GAPS.index(g)*4+PITCHES.index(p)*2+0.45 for g in GAPS for p in PITCHES])
     a.set_xticklabels(['%g mm\n%.1f mm px' % (g, p) for g in GAPS for p in PITCHES], fontsize=8)
-    a.set_yscale('log'); a.grid(alpha=.3, axis='y'); a.set_ylabel('rings per gas for a 5 sigma Xe 3 bar - air shift')
+    a.set_yscale('log'); a.grid(alpha=.3, axis='y'); a.set_ylabel('rings per gas for a 5 sigma %s - air shift' % GAS_LABEL[REF_GAS])
     a.set_title('Rings needed (blue: 0.97 (n_gas - 1); red: 0.935 (n_gas - n_air))\nper-photon spread from the pixel-centre radii, impact point known',
                 fontsize=9)
     fig.suptitle('Air vs Xe ring radius (vertical muon, FT x QE, matched seeds; error bars: std over seeds)', fontsize=12, color=INK)
@@ -875,7 +881,7 @@ def fig_terms(out, S):
              ('sp_point', 'aero disp.\n1-pole'), ('k4_point', 'aero disp.\nk4geo'), ('norayl', 'all but\nRayleigh'), ('full', 'full'))
     xs = np.arange(len(terms)); wbar = 0.13; k = 0
     for g in GAPS:
-        for gn in ('air', 'xe3'):
+        for gn in ('air', REF_GAS):
             v = [1e3*S['%s_%g' % (gn, g)][t]['aero_r_rms'] for t, _ in terms]
             a.bar(xs+(k-2.5)*wbar, np.maximum(v, 1e-3), wbar, color=GAP_COLOUR[g], alpha=1 if gn == 'air' else 0.5, edgecolor=INK, lw=0.3,
                   hatch='' if gn == 'air' else '//', label='gap %g mm, %s' % (g, GAS_LABEL[gn]))
@@ -952,7 +958,7 @@ def analyse_angles(out, res, args, summary):
             fa, ar = prox_reference(gn, g, np.array(U), np.array(P0))
             for (az, od, zi, oi), x, y in zip(IDX, fa, ar):
                 pf[gi, ji, az, od, zi, oi] = x; parc[gi, ji, az, od, zi, oi] = y
-    np.savez(out/'prox_angles.npz', variant=np.array(VARIANTS), gas=np.array(GAS_NAMES), gap_mm=np.array(GAPS), azimuth_deg=np.array(AZIMUTH),
+    np.savez(out/'prox_angles.npz', **provenance.npz(), variant=np.array(VARIANTS), gas=np.array(GAS_NAMES), gap_mm=np.array(GAPS), azimuth_deg=np.array(AZIMUTH),
              offset_dir=np.array(OFFSET_DIRS), zenith_deg=ZENITH, offset_mm=OFFSET, stats=st, stats_fields=np.array(STATS_FIELDS), phi=phi,
              phi_fields=np.array(['emitted', 'direct_on_sipm', 'direct_geometric_end', 'all_on_sipm']), reasons_w=rs, reasons=np.array(XREASONS),
              entry_xy_mm=p0, f_det=f_det, f_direct=f_dir, f_outside_sensor=f_out, f_tile_sides=f_sides, arc_frac=arc, arc_hit=arc_hit, rel_det=rel,
@@ -1077,7 +1083,7 @@ def save_acc(out, part, acc):
         tag = '|'.join(str(k) for k in key)
         for q, v in a.items():
             flat['%s|%s' % (tag, q)] = v
-    np.savez_compressed(out/('prox_%s.npz' % part), **flat)
+    np.savez_compressed(out/('prox_%s.npz' % part), **flat, **provenance.npz())
 
 
 def _key(p):
@@ -1091,7 +1097,7 @@ def _key(p):
 
 def load_acc(path, nkey):
     z = np.load(path, allow_pickle=False); acc = {}
-    for name in z.files:
+    for name in [n for n in z.files if n != provenance.KEY]:
         parts = name.split('|'); key = tuple(_key(p) for p in parts[:nkey]); q = parts[nkey]
         acc.setdefault(key, {})[q] = z[name]
     return acc
@@ -1126,7 +1132,7 @@ def main():
         jobs, tasks = build_jobs(args, parts, band)
         _CFG.update(jobs=jobs)
         print('band %.2f-%.2f eV; parts %s; %d tasks on %d processes' % (*band, ','.join(parts), len(tasks), args.nproc), flush=True)
-        accs = {pt: {} for pt in parts+(['points'] if 'onaxis' in parts else [])}; nch = {}
+        accs = {pt: {} for pt in parts+(['points'] if 'onaxis' in parts and 'points' not in parts else [])}; nch = {}
         with mp.get_context('fork').Pool(args.nproc) as pool:
             for t, res in zip(tasks, pool.imap(run_task, tasks, chunksize=8 if t_is_angles(tasks) else 1)):
                 if t[0] == 'angles':
@@ -1149,12 +1155,12 @@ def main():
             for key, r in accs['angles'].items():
                 for q, v in r.items():
                     flat['%s|%s' % ('|'.join(str(k) for k in key), q)] = v
-            np.savez_compressed(out/'prox_angles_raw.npz', **flat)
+            np.savez_compressed(out/'prox_angles_raw.npz', **flat, **provenance.npz())
     else:
         for pt in parts:
             if pt == 'angles':
                 accs[pt] = load_acc(out/'prox_angles_raw.npz', 7)
-            else:
+            elif pt != 'points':
                 accs[pt] = load_acc(out/('prox_%s.npz' % pt), 4 if pt == 'onaxis' else 3)
         if 'onaxis' in parts:
             accs['points'] = load_acc(out/'prox_points.npz', 4)
@@ -1176,7 +1182,7 @@ def main():
         else:
             res = accs['angles']
         analyse_angles(out, res, args, summary)
-    sp.write_text(json.dumps(to_jsonable(summary), indent=1))
+    sp.write_text(json.dumps(to_jsonable(provenance.with_record(summary)), indent=1))
     print('summary: %s; total wall time %.1f s' % (sp, time.time()-t0))
 
 

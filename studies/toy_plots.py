@@ -2,11 +2,12 @@
 
 Reads toy_76.npz from toy_aerogel.py (stdout, toy_aerogel_acceptance.png).
 """
+import json
 from pathlib import Path
 
 import numpy as np
 
-from xerich import cli
+from xerich import cli, provenance
 from xerich.analysis import binned_mean
 from xerich.constants import MIRROR_D, MIRROR_R, SENSOR_HALF_2IN, SENSOR_HALF_PROTO, SENSOR_MUON_RATE
 from xerich.layout import Aerogel, Mirror, Radiator, Sensor
@@ -14,15 +15,16 @@ from xerich.media import aerogel_index
 from xerich.plotting import AEROGEL, GAS, INK, LIGHT, MUTED, plt, save
 from xerich.sim import MirrorToy
 
-P_BAR = 3
 LAM = 400                    # wavelength for the indices [nm]
 
 
 def main():
-    p = cli.xe_index(cli.parser(__doc__))
+    p = cli.pressure(cli.porosity(cli.xe_index(cli.parser(__doc__))))   # --pressure: for inputs without a provenance record
     p.add_argument('--input', type=Path, default=None, help='toy_76.npz from toy_aerogel.py (default: <outdir>/toy_76.npz)')
     args = p.parse_args(); out = cli.outdir(args)
     r = dict(np.load(args.input if args.input is not None else out/'toy_76.npz'))
+    rec = json.loads(str(r.pop(provenance.KEY))) if provenance.KEY in r else {}
+    P = rec.get('args', {}).get('pressure', args.pressure)          # the pressure of the toy_aerogel.py run, if recorded
     rate = SENSOR_MUON_RATE
     bins = np.arange(0, 32, 2.0); c = 0.5*(bins[1:]+bins[:-1]); idx = np.digitize(r['th'], bins)-1
     mean_na = binned_mean(r['na'], idx, len(c)); mean_ng = binned_mean(r['ng'], idx, len(c))
@@ -32,18 +34,18 @@ def main():
     print('mean emitted aerogel photons on SiPM for 8-18 deg muons: %.2f' % r['na'][(r['th'] > 8)&(r['th'] < 18)].mean())
     print('gas: >=80%% of cone on SiPM: %.1f%% -> %.0f /h' % (100*np.mean(r['fg'] >= .8), rate*np.mean(r['fg'] >= .8)))
 
+    ng = Radiator(P, model=args.xe_index).n(LAM); na = aerogel_index(ng, porosity=args.porosity)
     fig, ax = plt.subplots(1, 3, figsize=(14, 4.6), gridspec_kw={'width_ratios': [1.25, 1, 1]})
     a = ax[0]
-    a.plot(c, mean_ng, '-o', color=GAS, ms=4, label='gas (Xe 3 bar)')
-    a.plot(c, mean_na, '-o', color=AEROGEL, ms=4, label='aerogel (n≈1.032 with Xe)')
+    a.plot(c, mean_ng, '-o', color=GAS, ms=4, label='gas (Xe %g bar)' % P)
+    a.plot(c, mean_na, '-o', color=AEROGEL, ms=4, label='aerogel (n≈%.4f with Xe)' % na)
     a.set_xlabel('muon zenith angle [deg]'); a.set_ylabel('emitted photons reaching SiPM / muon\n(320–450 nm, no QE, no scattering)')
     a.set_title('Geometric acceptance vs muon angle\n(3" mirror f=203 mm, 5.1×5.1 cm SiPM, μ uniform on SiPM)', fontsize=10)
     a2 = a.twinx(); h, _ = np.histogram(r['th'], bins); a2.bar(c, h/h.sum(), width=1.8, color=LIGHT, alpha=.3, zorder=0)
     a2.set_ylabel('fraction of muons', color=MUTED); a2.set_ylim(0, 0.4)
     a.set_zorder(a2.get_zorder()+1); a.patch.set_visible(False); a.legend(fontsize=8.5, loc='upper right'); a.grid(alpha=.3)
 
-    ng = Radiator(P_BAR, model=args.xe_index).n(LAM)
-    toy = MirrorToy(Mirror(MIRROR_R, MIRROR_D), Sensor(SENSOR_HALF_2IN), Aerogel(n=aerogel_index(ng)), ng)
+    toy = MirrorToy(Mirror(MIRROR_R, MIRROR_D), Sensor(SENSOR_HALF_2IN), Aerogel(n=na), ng)
     hs = SENSOR_HALF_PROTO
     rng = np.random.default_rng(11)
     for j, (thmu, lab) in enumerate(((3, 'μ at 3°'), (12, 'μ at 12°'))):

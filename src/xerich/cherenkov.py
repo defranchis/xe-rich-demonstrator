@@ -1,7 +1,9 @@
 """Cherenkov angle, threshold, Frank-Tamm photon yield and spectrum sampling, SiPM quantum efficiency."""
+from functools import partial
+
 import numpy as np
 
-from .constants import AEROGEL_N_AIR, ALPHA, HBARC_EV_CM, HC, T_ROOM
+from .constants import AEROGEL_N_AIR, AEROGEL_POROSITY, ALPHA, HBARC_EV_CM, HC, T_ROOM
 from .media import N_AIR, XE_INDEX_DEFAULT, aerogel_index, aerogel_index_air, n_xe
 
 # ARC SiPM quantum efficiency vs photon energy [eV], ARC_SiPM_QuantumEfficiency of the ARC simulation:
@@ -10,6 +12,19 @@ QE_ARC_E_EV = (4.9, 4.7, 4.5, 4.32, 4.147, 3.85, 3.647, 3.378, 3.163, 3.084, 3.0
                2.465, 2.101, 1.771, 1.55, 1.3, 1.1)
 QE_ARC = (0.0, 0.0, 0.1, 0.2, 0.41, 0.46, 0.47, 0.52, 0.59, 0.6, 0.6, 0.59, 0.57, 0.56, 0.53, 0.51, 0.4, 0.26, 0.13,
           0.0, 0.0)
+
+# Hamamatsu S13361-3050 PDE [%] vs wavelength [nm], through the epoxy window: datasheet KAPD1054E07 p. 3, typical curve, 25 degC, overvoltage 3 V (from the PDF vector path)
+PDE_S13361_NM = tuple(range(320, 896, 5))+(898,)
+PDE_S13361 = (2.49, 4.41, 7.31, 10.68, 14.29, 18.01, 20.88, 22.82, 24.48, 26.02, 27.54, 29.19,
+              30.77, 32.24, 33.54, 34.64, 35.38, 35.97, 36.65, 37.31, 37.89, 38.37, 38.72, 39.04,
+              39.36, 39.67, 39.95, 40.16, 40.22, 40.14, 40.00, 39.84, 39.65, 39.45, 39.24, 39.00,
+              38.73, 38.35, 37.87, 37.34, 36.79, 36.21, 35.60, 34.97, 34.29, 33.61, 32.95, 32.28,
+              31.62, 30.96, 30.30, 29.64, 28.98, 28.31, 27.64, 26.95, 26.29, 25.72, 25.17, 24.62,
+              24.02, 23.35, 22.55, 21.66, 20.99, 20.41, 19.87, 19.36, 18.86, 18.38, 17.90, 17.43,
+              16.95, 16.49, 16.05, 15.62, 15.21, 14.80, 14.39, 13.99, 13.59, 13.20, 12.81, 12.43,
+              12.05, 11.68, 11.31, 10.95, 10.60, 10.26, 9.92, 9.61, 9.30, 9.01, 8.72, 8.43,
+              8.16, 7.88, 7.61, 7.34, 7.08, 6.82, 6.57, 6.31, 6.06, 5.82, 5.58, 5.34,
+              5.11, 4.88, 4.65, 4.43, 4.22, 4.01, 3.82, 3.63, 3.52)
 
 
 def beta(p, m):
@@ -61,6 +76,22 @@ def photon_yield(E, p, m, P_bar, T=T_ROOM, model=XE_INDEX_DEFAULT):
 def qe_arc(E_eV):
     """ARC SiPM quantum efficiency at photon energy E_eV [eV], linear in energy, 0 outside the table."""
     return np.interp(E_eV, QE_ARC_E_EV[::-1], QE_ARC[::-1], left=0.0, right=0.0)
+
+
+def pde_s13361(E_eV):
+    """Hamamatsu S13361-3050 PDE (fraction) at photon energy E_eV [eV], linear in wavelength, 0 outside 320-898 nm."""
+    return np.interp(HC/np.asarray(E_eV, float), PDE_S13361_NM, np.array(PDE_S13361)/100, left=0.0, right=0.0)
+
+
+RESPONSES = {'arc_qe': qe_arc, 's13361': pde_s13361}   # photodetection response options: name -> weight(E [eV])
+RESPONSE_DEFAULT = 'arc_qe'
+
+
+def response(name=RESPONSE_DEFAULT):
+    """Photodetection response weight(E [eV]) of the given name: 'arc_qe' (ARC simulation QE) or 's13361' (S13361 PDE)."""
+    if name not in RESPONSES:
+        raise ValueError('unknown sensor response %r (choose from %s)' % (name, ', '.join(RESPONSES)))
+    return RESPONSES[name]
 
 
 def qe_band():
@@ -124,8 +155,9 @@ def theta_xe(P_bar, beta=1.0, T=T_ROOM, model=XE_INDEX_DEFAULT):
     return float(ftqe_angle_yield(lambda lam: n_xe(lam, P_bar, T, model), beta)[0][0])
 
 
-def pore_signal(P_bar, lam=400.0, n_tile=AEROGEL_N_AIR, T=T_ROOM, model=XE_INDEX_DEFAULT):
+def pore_signal(P_bar, lam=400.0, n_tile=AEROGEL_N_AIR, T=T_ROOM, model=XE_INDEX_DEFAULT, porosity=AEROGEL_POROSITY):
     """beta = 1 aerogel-angle shift [rad] from Xe at P_bar in the pores, relative to air in the pores, at lam [nm]:
-    (n_tile = index in air, media.aerogel_index_air; n_tile = index with empty pores, media.aerogel_index)."""
+    (n_tile = index in air, media.aerogel_index_air; n_tile = index with empty pores, media.aerogel_index with porosity)."""
     ng = n_xe(lam, P_bar, T, model)
-    return tuple(float(theta_c(f(ng, n_tile))-theta_c(f(N_AIR, n_tile))) for f in (aerogel_index_air, aerogel_index))
+    vac = partial(aerogel_index, porosity=porosity)
+    return tuple(float(theta_c(f(ng, n_tile))-theta_c(f(N_AIR, n_tile))) for f in (aerogel_index_air, vac))

@@ -1,4 +1,4 @@
-"""Cosmic gas-ring rates vs mirror and sensor size, 3 bar, ring fully contained on the sensor (stdout)."""
+"""Cosmic gas-ring rates vs mirror and sensor size, Xe at --pressure, ring fully contained on the sensor (stdout)."""
 import numpy as np
 
 from xerich import cli
@@ -7,10 +7,10 @@ from xerich.sim import ring_rate_full
 
 
 def main():
-    args = cli.slope_term(cli.thc(cli.xe_index(cli.parser(__doc__)))).parse_args()
-    thc = cli.thc_value(args, 3.0)
+    args = cli.pressure(cli.slope_term(cli.thc(cli.xe_index(cli.parser(__doc__))))).parse_args()
+    thc = cli.thc_value(args, args.pressure)
     rng = np.random.default_rng(2)
-    print('3 bar (th_c=%.1f mrad), L=200 mm radiator, sensor 80x80 mm; rates per hour' % (1e3*thc))
+    print('%g bar (th_c=%.1f mrad), L=200 mm radiator, sensor 80x80 mm; rates per hour' % (args.pressure, 1e3*thc))
     for (D, f) in ((50.8, 203.2), (76.2, 203.2), (101.6, 203.2), (152.4, 203.2), (200, 203.2), (260, 185)):
         mirror = Mirror.from_focal(f, D)
         r1, _ = ring_rate_full(rng, mirror, Sensor(40), 200, thc, slope_term=args.slope_term)

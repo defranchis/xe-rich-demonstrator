@@ -1,6 +1,7 @@
 """Rates, photon counts, containment and angle-shift tables and figures from cosmic_rates.py (stdout, json, md, png).
 
-Reads cosmic_rates_<group>.npz and cosmic_rates_meta.json from --input. Ring definitions: gas ring, full = >= 99 % of
+Reads cosmic_rates_<group>.npz and cosmic_rates_meta.json from --input. Ring definitions (geometric, independent of the
+photodetection response; with the board sensor on its footprint): gas ring, full = >= 99 % of
 the sampled photons on the mirror and of the ring on the SiPM, >= 80 % = >= 80 % on both (docs/design_options.md
 section 5); aerogel ring, full / >= 80 % = >= 99 % / >= 80 % of the emitted photons on the SiPM (losses through the
 tile sides count; the tracer treats the tile side faces as black); arc >= 50 % = half of the 36 azimuth bins (those
@@ -34,13 +35,14 @@ from pathlib import Path  # noqa: E402
 
 import numpy as np  # noqa: E402
 
-from xerich import cli, muons  # noqa: E402
-from xerich.cherenkov import beta as beta_of, chromatic_rms, ftqe_angle_yield, pore_signal, qe_arc, qe_band, theta_c  # noqa: E402
-from xerich.constants import AEROGEL_N_AIR, AEROGEL_T, COSMIC_I0, COSMIC_I0_PMIN, HC, M_MU, MIRROR_R, MIRROR_SHORT_F, MUON_THMAX, PIXEL_PITCH  # noqa: E402
+from xerich import cli, muons, provenance  # noqa: E402
+from xerich.cherenkov import RESPONSE_DEFAULT, beta as beta_of, chromatic_rms, ftqe_angle_yield, pore_signal, response, theta_c  # noqa: E402
+from xerich.constants import AEROGEL_LAMBDA_REF, AEROGEL_N_AIR, AEROGEL_POROSITY, AEROGEL_T, COSMIC_I0, COSMIC_I0_PMIN, M_MU, MIRROR_R, MIRROR_SHORT_F, MUON_THMAX, P_REF, PIXEL_PITCH, T_PORE  # noqa: E402
 from xerich.layout import Phase1Layout  # noqa: E402
-from xerich.media import N_AIR, ConstantIndex, Rayleigh, aerogel_index, aerogel_index_air, n_xe  # noqa: E402
+from xerich.media import N_AIR, aerogel_index, aerogel_index_air, n_xe  # noqa: E402
 from xerich.muons import MuonSpectrum, flux_through_square, intensity, sample_cos3  # noqa: E402
 from xerich.plotting import MUTED, plt, save  # noqa: E402
+from xerich.sim import proximity_photons, proximity_rayleigh  # noqa: E402
 from xerich.tracer import snell_angle  # noqa: E402
 
 PRESSURES = (1.0, 1.5, 2.0, 2.5, 3.0)
@@ -53,6 +55,7 @@ ABSORBER_CM = (0, 5, 10, 20, 30, 50, 75, 100)
 KEEP_REF = 0.9               # fraction of the range-cut rings the enlarged bottom counter keeps
 SHORT_F_KEY = {'f%d' % f: k for k, (f, D) in MIRROR_SHORT_F.items()}   # run label -> Edmund stock number
 Z_TILE_MID = Phase1Layout.gap+AEROGEL_T/2    # tile mid-plane below the SiPM plane [mm]
+XREF = 'xe%g' % P_REF        # run label of Xe at the reference pressure
 HIST_LO = -250.0             # lower edge of the aerogel-angle shift histograms [mrad] (below -theta_c of every tile index, >= -249.6)
 _G = {}
 
@@ -65,28 +68,56 @@ def n_gas400(P):
     return N_AIR if P == 0 else float(n_xe(400.0, P))
 
 
+def pore_t():
+    """Temperature of the gas in the aerogel pores [K] of the cosmic_rates.py run."""
+    return _G.get('inputs', {}).get('pore_t', T_PORE)
+
+
+def porosity_vac():
+    """Porosity of the pore-vac tile variant of the cosmic_rates.py run."""
+    return _G.get('inputs', {}).get('porosity_vac', AEROGEL_POROSITY)
+
+
+def pore_gas_signal(P):
+    """pore_signal at P bar with the pore-gas temperature and porosity of the run."""
+    return pore_signal(P, T=pore_t(), porosity=porosity_vac())
+
+
 def tile_n(P, v):
-    ng = n_gas400(P)
-    return {'plain': AEROGEL_N_AIR, 'pore-vac': float(aerogel_index(ng)), 'pore-air': float(aerogel_index_air(ng))}[v]
+    ng = N_AIR if P == 0 else float(n_xe(400.0, P, pore_t()))
+    return {'plain': AEROGEL_N_AIR, 'pore-vac': float(aerogel_index(ng, porosity=porosity_vac())), 'pore-air': float(aerogel_index_air(ng))}[v]
 
 
 def xe_table(P):
     """(beta grid, FT x QE mean angle, yield) in Xe at P bar."""
     b = np.r_[1-np.geomspace(1e-6, 0.2, 3000)[::-1], 1.0]
-    th, Y = ftqe_angle_yield(lambda lam: n_xe(lam, P), b)
+    th, Y = ftqe_angle_yield(lambda lam: n_xe(lam, P), b, _G['qe'])
     return b, th, Y
 
 
 def xe_chromatic_rms(P):
     """FT x QE rms of the Xe Cherenkov angle at beta = 1 [rad] at P bar."""
-    return chromatic_rms(lambda lam: n_xe(lam, P))
+    return chromatic_rms(lambda lam: n_xe(lam, P), _G['qe'])
 
 
 def rayleigh_prox(n=AEROGEL_N_AIR):
     """FT x QE mean transmission of aerogel photons from a uniform emission depth to the tile bottom (vertical muon)."""
-    E = np.linspace(*qe_band(), 2001); w = qe_arc(E); L = Rayleigh().length(HC/E)
-    s = AEROGEL_T/np.cos(theta_c(n))*(np.arange(200)+0.5)/200
-    return float(np.sum(w*np.exp(-s[:, None]/L[None, :]).mean(0))/w.sum())
+    return proximity_rayleigh(n, _G['qe'])
+
+
+def c4_transmission(runs):
+    """Rayleigh mode of configuration 4 (--prox-rayleigh; 'vertical' for runs before the option) and, with the per-photon
+    transmission, the mean tile_tr per gap of the >= 80 % rings in the telescope: plain tile at Xe P_REF, real beta, weighted
+    as the rates."""
+    mode = _G['inputs'].get('prox_rayleigh', 'vertical'); tr = {}
+    for r in runs:
+        if r['group'] == 'c4' and r['P'] == P_REF and r['variant'] == 'plain':
+            z = np.load(_G['input']/'cosmic_rates_c4.npz'); name = r['name']
+            if name+'/br_tile_tr' in z.files:
+                c, p = z[name+'/c'], z[name+'/p']; w = weights(p, c)['guan']
+                sel = acceptances(z, name, 'c4', 'tile', 'br')['r80']&z[name+'/top']&z[name+'/bot']
+                tr['%g' % r['gap']] = float(np.average(z[name+'/br_tile_tr'][sel], weights=w[sel])) if sel.any() else None
+    return dict(mode=mode, tile_tr_mean_r80_tel=tr)
 
 
 def weights(p, c):
@@ -117,14 +148,14 @@ def acceptances(z, name, kind, origin, tag):
     if kind == 'c4':
         fd, arc, th = g('fd'), g('arc'), g('th')
         return dict(full=(fd >= .99)&(th > 0), r80=(fd >= .8)&(th > 0), arc50=(arc >= .5)&(th > 0), any=(fd > 0)&(th > 0))
-    fm, fs, arc, e, fd, anyb = g('fm'), g('fs'), g('arc_half'), g('emit_qe'), g('fd'), g('arc')
-    live = e > 0
-    out = dict(arc50=(arc >= .5)&live, arc90=(arc >= .9)&live, arc50_any=(anyb >= .5)&live, arc90_any=(anyb >= .9)&live,
-               any=(g('det_qe') > 0)&live)
+    # geometric: every fraction and arc is 0 without light above threshold in the sampled band (the ARC QE band), so a ring
+    # counts from its light whatever the photodetection response; 'any' needs detected photons (response-weighted)
+    fm, fs, arc, fd, anyb = g('fm'), g('fs'), g('arc_half'), g('fd'), g('arc')
+    out = dict(arc50=arc >= .5, arc90=arc >= .9, arc50_any=anyb >= .5, arc90_any=anyb >= .9, any=g('det_qe') > 0)
     if origin == 'tile':
-        out.update(full=(fd >= .99)&live, r80=(fd >= .8)&live)
+        out.update(full=fd >= .99, r80=fd >= .8)
     else:
-        out.update(full=(fm >= .99)&(fs >= .99)&live, r80=(fm >= .8)&(fs >= .8)&live, fd80=(fd >= .8)&live)
+        out.update(full=(fm >= .99)&(fs >= .99), r80=(fm >= .8)&(fs >= .8), fd80=fd >= .8)
     return out
 
 
@@ -135,10 +166,12 @@ def per_seed(F, w, m, seed, nseed):
 def photons(z, name, run, origin, tag, c, bb):
     """FT x QE photons on the SiPM per muon, Rayleigh transmission applied."""
     if run['group'] == 'c4':
-        na = tile_n(run['P'], run['variant'])
-        bg = np.r_[1-np.geomspace(1e-7, 0.1, 2000)[::-1], 1.0]
-        Y = np.interp(bb, bg, ftqe_angle_yield(ConstantIndex(na), bg)[1])
-        return Y*AEROGEL_T/c*z['%s/%s_tile_fd' % (name, tag)]*_G['ray_c4']
+        inp = _G['inputs']
+        Y = proximity_photons(tile_n(run['P'], run['variant']), bb, c, _G['qe'], inp.get('aerogel_index', 'constant'),
+                              inp.get('aerogel_lambda_ref', AEROGEL_LAMBDA_REF))
+        act = z['%s/%s_tile_act' % (name, tag)] if '%s/%s_tile_act' % (name, tag) in z.files else 1.0   # board: active pads only
+        tr = '%s/%s_tile_tr' % (name, tag)                     # per-photon transmission, else that of a vertical muon
+        return Y*z['%s/%s_tile_fd' % (name, tag)]*(z[tr] if tr in z.files else _G['ray_c4'])*act
     det = z['%s/%s_%s_det_qe' % (name, tag, origin)]
     if name.endswith('_geo'):
         return z['%s/%s_%s_det_qe_clean' % (name.replace('_geo', '_ray'), tag, origin)]
@@ -147,6 +180,26 @@ def photons(z, name, run, origin, tag, c, bb):
     if origin == 'tile':
         return det*_G['ray_tile'].get((run['group'], tuple(run['mirror']), 'air' if run['P'] == 0 else 'xe'), _G['ray_tile_default'])
     return det
+
+
+def pad_arrays(z, name, run, origin, tag):
+    """(fired pads, P(N >= k) (n, PAD_KMAX + 1), photons on the board footprint, photons on the active pads without the
+    muon's pad, reflected photons on the active pads, fired pads with the reflected light) per muon of a board-sensor
+    run, ring hits and photons without Rayleigh scatter (configuration 5 gas ring: from the _ray run, as photons()); the
+    last two are None without a board reflectance. None otherwise.
+    Aerogel light of the mirror runs without Rayleigh scattering (configurations 2, 3, 5) gets None: photons() applies a
+    mean transmission to it, which binary pad hits cannot take afterwards."""
+    src = name.replace('_geo', '_ray') if name.endswith('_geo') else name
+    k = '%s/%s_%s_pads' % (src, tag, origin)
+    if k not in z.files or (origin == 'tile' and run['group'] != 'c4' and not run['rayleigh']):
+        return None
+    if run['group'] == 'c4':
+        act = z['%s/%s_tile_act' % (name, tag)]; bb = np.ones(len(act)) if tag == 'b1' else beta_of(z[name+'/p'], M_MU)
+        nph = photons(z, name, run, origin, tag, z[name+'/c'], bb)
+        plane = np.where(act > 0, nph/np.where(act > 0, act, 1), 0.0)
+        return z[k], z[k+'_pge'], plane, plane*z['%s/%s_tile_act_ring' % (name, tag)], None, None
+    rk = '%s/%s_%s_refl_qe' % (src, tag, origin); refl = (z[rk], z['%s/%s_%s_pads_refl' % (src, tag, origin)]) if rk in z.files else (None, None)
+    return (z[k], z[k+'_pge'], z['%s/%s_%s_det_qe_plane' % (src, tag, origin)], z['%s/%s_%s_det_qe_ring' % (src, tag, origin)], *refl)
 
 
 def analyse_run(arg):
@@ -164,6 +217,7 @@ def analyse_run(arg):
             wk = 'b1' if tag == 'b1' else 'guan'; w = W[wk]
             A = acceptances(z, name, kind, origin, tag)
             nph = photons(z, name, run, origin, tag, c, bb)
+            pads = pad_arrays(z, name, run, origin, tag)
             R = {}
             for nk, nm in norms.items():
                 d = {}
@@ -175,6 +229,20 @@ def analyse_run(arg):
                 d['nmin_curve'] = [float(F*np.sum((w*sel)[nph >= k])/len(c)) for k in NMIN]
                 d['photons_mean_r80'] = float(np.average(nph[sel], weights=w[sel])) if sel.any() else 0.0
                 d['inv_photons_r80'] = float(np.average(1/np.maximum(nph[sel], 0.5), weights=w[sel])) if sel.any() else 0.0
+                if pads is not None and sel.any():
+                    npad, pge, plane, ringph, reflph, pads_refl = pads
+                    d['pads_mean_r80'] = float(np.average(npad[sel], weights=w[sel]))
+                    if reflph is not None:
+                        d['refl_photons_mean_r80'] = float(np.average(reflph[sel], weights=w[sel]))
+                        d['other_hits_mean_r80'] = float(np.average((pads_refl-npad)[sel], weights=w[sel]))
+                    d['ring_photons_mean_r80'] = float(np.average(ringph[sel], weights=w[sel]))
+                    d['plane_photons_mean_r80'] = float(np.average(plane[sel], weights=w[sel]))
+                    if name.endswith('_geo'):
+                        d['geo_plane_photons_mean_r80'] = float(np.average(z['%s/%s_%s_det_qe_plane' % (name, tag, origin)][sel], weights=w[sel]))
+                    d['pads_frac_ge_r80'] = [float(np.sum((w*pge[:, k])[sel])/np.sum(w[sel])) for k in range(pge.shape[1])]
+                    d['pads_curve_r80'] = [float(F*np.sum((w*pge[:, k])[sel])/len(c)) for k in range(pge.shape[1])]   # rings /h with >= k hits
+                    d['pads_rate_ge_r80'] = {str(k): [float(x) for x in (lambda r: (r.mean(), r.std(ddof=1)))(per_seed(F, w*pge[:, k], sel, seed, nseed))]
+                                             for k in (1, 3, 5, 10)}
                 R[nk] = d
             sel = A['r80']
             R['photon_hist'] = np.histogram(nph[sel], np.arange(0, 82, 2), weights=w[sel])[0].tolist()
@@ -356,7 +424,9 @@ def main():
         meta = json.load(fm)
     runs = meta['runs']
     _G['spec'] = MuonSpectrum(meta['args'].get('spectrum', muons.SPECTRUM_DEFAULT))
+    _G['inputs'] = meta.get('inputs', {}); _G['qe'] = response(_G['inputs'].get('response', RESPONSE_DEFAULT))
     _G['input'] = args.input
+    _G['source'] = dict(source=dict(provenance=meta.get(provenance.KEY), args=meta['args'], inputs=meta.get('inputs')))   # the cosmic_rates.py run
     _G['top_half'] = meta['top_half']; _G['bot_half'] = meta['bot_half']
     _G['rshift'], _G['dr_dtheta'] = load_rshift(args.short_f) if args.short_f is not None else (None, None)
     with mp.get_context('fork').Pool(min(args.nproc, len(PRESSURES))) as pool:
@@ -371,8 +441,13 @@ def main():
             t = z[r['name']+'/b1_tile_det_qe_clean'].mean()/z[ref+'/b1_tile_det_qe'].mean()
             _G['ray_tile'][(r['group'], tuple(r['mirror']), 'air' if r['P'] == 0 else 'xe')] = float(t)
     _G['ray_tile_default'] = float(np.mean([v for k, v in _G['ray_tile'].items() if k[2] == 'xe']))
-    print('Rayleigh transmission of the aerogel ring photons (FT x QE): %s; configuration 4 (computed): %.3f; configuration 5 tile light uses %.3f'
+    print('Rayleigh transmission of the aerogel ring photons (FT x QE): %s; configuration 4 (computed, vertical muon): %.3f; configuration 5 tile light uses %.3f'
           % (', '.join('%s %s %s: %.3f' % (k[0], k[1], k[2], v) for k, v in _G['ray_tile'].items()), _G['ray_c4'], _G['ray_tile_default']))
+    c4 = c4_transmission(runs) if any(r['group'] == 'c4' for r in runs) else None
+    if c4:
+        print('Configuration 4 Rayleigh transmission: %s%s' % (c4['mode'], '; mean tile_tr of the >= 80 %% rings in the telescope (Xe %g bar, '
+              'plain tile, real beta): %s' % (P_REF, ', '.join('gap %s: %s' % (g, 'none' if t is None else '%.4f' % t)
+                                                               for g, t in c4['tile_tr_mean_r80_tel'].items())) if c4['tile_tr_mean_r80_tel'] else ''))
     with mp.get_context('fork').Pool(args.nproc) as pool:
         res = pool.map(analyse_run, [(r['group'], r) for r in runs])
     R = {r['name']: x for r, x in zip(runs, res)}
@@ -389,12 +464,17 @@ def main():
                 pr = precision(run_of[name], origin, x[k], nk)
                 x[k][nk]['precision_mrad_1h'] = pr
     with open(out/'cosmic_rates_summary.json', 'w') as fo:
-        json.dump(dict(runs=R, trigger=trig, rayleigh=dict(tile={'%s %s %s' % k: v for k, v in _G['ray_tile'].items()}, c4=_G['ray_c4']),
+        json.dump(provenance.with_record(dict(runs=R, trigger=trig, rayleigh=dict(tile={'%s %s %s' % k: v for k, v in _G['ray_tile'].items()}, c4=_G['ray_c4']),
                        chromatic_rms_mrad={str(k): 1e3*v for k, v in _G['chrom'].items()},
-                       pore_signal_mrad=[1e3*x for x in pore_signal(PRESSURES[-1])],
-                       dr_dtheta=_G['dr_dtheta']), fo, indent=1)
+                       pore_signal_mrad=[1e3*x for x in pore_gas_signal(P_REF)], pore_signal_bar=P_REF,
+                       dr_dtheta=_G['dr_dtheta'], **({'rayleigh_c4': c4} if c4 else {})), **_G.get('source', {})), fo, indent=1)
     tables(R, run_of, trig, out)
-    figures(R, run_of, out)
+    if any('pads_mean_r80' in x[k]['tel'] for x in R.values() for k in x if k.startswith(('gas_', 'tile_'))):
+        board_table(R, out, meta['args'].get('nphot'))
+    if meta['args'].get('groups') is None:
+        figures(R, run_of, out)
+    else:
+        print('figures skipped: they need every run group (cosmic_rates.py without --groups)')
     print('cores used: %d' % args.nproc)
 
 
@@ -411,7 +491,7 @@ def tables(R, run_of, trig, out):
     """Task tables (stdout and cosmic_rates_tables.md)."""
     L = []
     L.append('## Configuration rates (rings per hour; beta = 1 = cos^2, I0 = %g, beta = 1; real = Guan spectrum and per-muon beta; mean +- seed std)\n' % COSMIC_I0)
-    L.append('| Configuration | Light | Normalisation | Trigger /h (beta = 1 / real) | Definition | beta = 1 /h | real /h | real /day | real / beta = 1 | spectrum band /h | FT x QE photons per >= 80 % ring (real) | precision on the mean angle after 1 h [mrad] (real; pixel-only) |')
+    L.append('| Configuration | Light | Normalisation | Trigger /h (beta = 1 / real) | Definition | beta = 1 /h | real /h | real /day | real / beta = 1 | spectrum band /h | FT x response photons per >= 80 % ring (real; board: on active pads, the muon\'s pad included) | precision on the mean angle after 1 h [mrad] (real; pixel-only) |')
     L.append('|---|---|---|---|---|---|---|---|---|---|---|---|')
     rows = []
     for P in PRESSURES:
@@ -447,9 +527,9 @@ def tables(R, run_of, trig, out):
                 summary.append(dict(config=lab, name=name, origin=origin, norm=nk, definition=d, beta1=b1, real=re, band=[min(band), max(band)],
                                     photons=xr['photons_mean_r80'], precision=pr if d == 'r80' else None))
     with open(out/'cosmic_rates_table.json', 'w') as fo:
-        json.dump(summary, fo, indent=1)
+        json.dump(provenance.with_record(dict(rows=summary), **_G.get('source', {})), fo, indent=1)
     # larger mirror layouts (docs/design_options.md section 6.1)
-    L.append('\n## Larger mirror layouts with the tile (Xe 3 bar, muons uniform over the 5 x 5 cm tile; per hour; beta = 1 / real)\n')
+    L.append('\n## Larger mirror layouts with the tile (Xe %g bar, muons uniform over the 5 x 5 cm tile; per hour; beta = 1 / real)\n' % P_REF)
     L.append('| SiPM | Mirror | Tile | Aerogel arcs >= 50 % (any photon per bin, as the beta = 1 toys) | Aerogel arcs >= 50 % (half the bin light) | Full aerogel rings (arc >= 90 %, any photon) | Gas rings (>= 80 % of the photons on the SiPM) | Emitted / detected aerogel FT x QE per muon | Emitted / detected gas FT x QE per muon |')
     L.append('|---|---|---|---|---|---|---|---|---|')
     for name, x in R.items():
@@ -493,6 +573,8 @@ def tables(R, run_of, trig, out):
                 cells = []
                 for tag, key, frac in (('b1', 'theta_tile_seed', None), ('br', 'theta_tile_seed', None), ('br', 'theta_tile_win_seed', 'win_fraction'),
                                        ('br', 'theta_tile_ownwin_seed', 'ownwin_fraction'), ('br', 'theta_tile_edge_seed', None)):
+                    if key not in R[nm]['tile_%s' % tag] or key not in R[ref]['tile_%s' % tag]:   # no >= 80 % ring (small samples)
+                        cells.append('-'); continue
                     a = np.array(R[nm]['tile_%s' % tag][key]); b = np.array(R[ref]['tile_%s' % tag][key]); d = a-b
                     cells.append('%.2f +- %.2f' % (d.mean(), d.std(ddof=1)/np.sqrt(len(d)))+(' (%.2f)' % R[nm]['tile_br'][frac] if frac else ''))
                 hp = (R[nm]['tile_br'].get('theta_tile_mean_p2'), R[ref]['tile_br'].get('theta_tile_mean_p2'))
@@ -509,7 +591,38 @@ def tables(R, run_of, trig, out):
                     L.append('| %s | %s | %.2f / %.2f | %.2f / %.2f | %.2f / %.2f | %.1f |' % (name, 'β = 1' if tag == 'b1' else 'real', *o['velocity'], *o['offset'], *o['total'], o['rho_mean']))
     txt = '\n'.join(L)
     with open(out/'cosmic_rates_tables.md', 'w') as fo:
-        fo.write(txt+'\n')
+        fo.write(provenance.md_line(**_G.get('source', {}))+'\n\n'+txt+'\n')
+    print(txt)
+
+
+def board_table(R, out, nphot):
+    """Board-sensor table (stdout and cosmic_rates_board.md): photons and binary pad hits of the >= 80 % rings, with the
+    --nphot of the cosmic_rates.py run (the pad hits depend on it)."""
+    L = ['## Board sensor: >= 80 %% rings through the telescope, real spectrum (ring hits: binary pad hits of the photons without Rayleigh'
+         ' scatter; photons on the footprint: all of them; photons on active pads and ring hits: the pad crossed by the muon left out;'
+         ' mean +- seed std; cosmic_rates.py --nphot %s; reflected light by the board: other light, never ring hits)\n' % nphot,
+         '| Configuration | rings /h | rings /day | photons on the footprint | photons on active pads | fired pads | P(>= 3 hits) | P(>= 10 hits)'
+         ' | rings /day >= 3 hits | rings /day >= 10 hits | Rayleigh-scattered gas-ring photons | reflected photons on active pads'
+         ' | other hits from board reflection |',
+         '|---|---|---|---|---|---|---|---|---|---|---|---|---|']
+    rows = [(lab % P, name % gas_label(P), 'gas') for P in PRESSURES
+            for lab, name in (('1, Xe %g bar', 'c1_%s'), ('5, Xe %g bar (gas ring)', 'c5_%s_plain_geo'))]
+    rows += [('4, %s, gap %d mm (aerogel ring)' % ('air' if P == 0 else 'Xe %g bar' % P, g), 'c4_%s_g%d_plain' % (gas_label(P), g), 'tile')
+             for g in (30, 50, 70) for P in (0.0,)+PRESSURES]
+    for lab, name, origin in rows:
+        x = R.get(name, {}).get('%s_br' % origin, {}).get('tel', {})
+        if 'pads_mean_r80' not in x:
+            continue
+        r80 = x['r80_guan']; g3 = x['pads_rate_ge_r80']['3']; g10 = x['pads_rate_ge_r80']['10']
+        # footprint photons without Rayleigh scatter (_ray run) over those without scattering (_geo run), same muons and rings
+        scat = '%.3f' % (1-x['plane_photons_mean_r80']/x['geo_plane_photons_mean_r80']) if 'geo_plane_photons_mean_r80' in x else ''
+        refl = ('%.3f | %.3f' % (x['refl_photons_mean_r80'], x['other_hits_mean_r80'])) if 'refl_photons_mean_r80' in x else ' | '
+        L.append('| %s | %s | %.0f | %.2f | %.2f | %.2f | %.3f | %.3f | %.0f +- %.0f | %.0f +- %.0f | %s | %s |' % (
+            lab, fmt(r80), 24*r80[0], x['plane_photons_mean_r80'], x['ring_photons_mean_r80'], x['pads_mean_r80'], x['pads_frac_ge_r80'][3],
+            x['pads_frac_ge_r80'][10], 24*g3[0], 24*g3[1], 24*g10[0], 24*g10[1], scat, refl))
+    txt = '\n'.join(L)
+    with open(out/'cosmic_rates_board.md', 'w') as fo:
+        fo.write(provenance.md_line(**_G.get('source', {}))+'\n\n'+txt+'\n')
     print(txt)
 
 
@@ -546,10 +659,10 @@ def figures(R, run_of, out):
     ax[1].set_xlabel('FT×QE photons on the SiPM per ring'); ax[1].set_ylabel('>= 80 % rings per hour per bin (SiPM plane)')
     ax[1].set_title('Photons per ring (dotted: β = 1, same total)', loc='left', fontsize=10); ax[1].legend(fontsize=8); ax[1].grid(alpha=.3)
     plt.tight_layout(); save(out, 'cosmic_rates_c1_radius_photons.png', dpi=130, fig=fig); plt.close(fig)
-    # containment maps, configuration 1 at 3 and 2 bar
+    # containment maps, configuration 1 at the reference pressure
     fig, ax = plt.subplots(1, 3, figsize=(16, 4.8))
-    for i, (P, tag, lab) in enumerate(((3.0, 'gas_br', 'real'), (3.0, 'gas_b1', 'β = 1'))):
-        m = R['c1_xe3'][tag]['maps']
+    for i, (P, tag, lab) in enumerate(((P_REF, 'gas_br', 'real'), (P_REF, 'gas_b1', 'β = 1'))):
+        m = R['c1_%s' % gas_label(P)][tag]['maps']
         im = ax[i].pcolormesh(m['rb'], m['zb'], np.ma.masked_less(np.array(m['map']), 0), vmin=0, vmax=1, cmap='Blues')
         ax[i].set_xlabel('mirror-plane impact offset from the axis [mm]'); ax[i].set_ylabel('muon zenith angle [deg]')
         ax[i].set_title('Config 1, Xe %g bar, %s: P(>= 80 %% ring)\n(all triggered muons, below threshold included)' % (P, lab), loc='left', fontsize=9.5)
@@ -558,20 +671,21 @@ def figures(R, run_of, out):
         for tag, ls in (('gas_br', '-'), ('gas_b1', ':')):
             m = R['c1_%s' % gas_label(P)][tag]['maps']; zb = np.array(m['zb'])
             cv = np.array(m['curve']); cv[cv < 0] = np.nan
-            ax[2].plot(0.5*(zb[1:]+zb[:-1]), cv, ls, color=col, label='%g bar%s' % (P, '' if tag == 'gas_br' else ' (β = 1)') if tag == 'gas_br' or P == 3.0 else None)
+            ax[2].plot(0.5*(zb[1:]+zb[:-1]), cv, ls, color=col, label='%g bar%s' % (P, '' if tag == 'gas_br' else ' (β = 1)') if tag == 'gas_br' or P == P_REF else None)
     ax[2].set_xlabel('muon zenith angle [deg]'); ax[2].set_ylabel('P(>= 80 % ring), offset < 8 mm'); ax[2].grid(alpha=.3); ax[2].legend(fontsize=7.5)
     ax[2].set_title('Near the axis: real β (solid), β = 1 (dotted)', loc='left', fontsize=10)
     plt.tight_layout(); save(out, 'cosmic_rates_c1_containment.png', dpi=130, fig=fig); plt.close(fig)
     # aerogel-angle shift distributions, configurations 2-4
     fig, ax = plt.subplots(1, 3, figsize=(16, 4.8))
-    edges = np.arange(HIST_LO, 3, 1.0); ps = [1e3*x for x in pore_signal(PRESSURES[-1])]
+    edges = np.arange(HIST_LO, 3, 1.0); ps = [1e3*x for x in pore_gas_signal(P_REF)]
     for i, (names, title) in enumerate(((['c2_f50_plain', 'c2_f76_plain'], 'Config 2 (air), f = 50.8 / 76.2 mm'),
-                                        (['c3_f50_xe3_plain', 'c3_f76_xe3_plain'], 'Config 3 (Xe 3 bar), f = 50.8 / 76.2 mm'),
-                                        (['c4_air_g30_plain', 'c4_xe3_g30_plain', 'c4_air_g50_plain', 'c4_xe3_g50_plain'], 'Config 4, gaps 30 / 50 mm, air / Xe 3 bar'))):
+                                        (['c3_f50_%s_plain' % XREF, 'c3_f76_%s_plain' % XREF], 'Config 3 (Xe %g bar), f = 50.8 / 76.2 mm' % P_REF),
+                                        (['c4_air_g30_plain', 'c4_%s_g30_plain' % XREF, 'c4_air_g50_plain', 'c4_%s_g50_plain' % XREF],
+                                         'Config 4, gaps 30 / 50 mm, air / Xe %g bar' % P_REF))):
         for nm, col in zip(names, ('#2a78d6', '#eb6834', '#1baf7a', '#eda100')):
             x = R[nm]['tile_br']; h = np.array(x['dtheta_hist']); h = h/max(h.sum(), 1e-12)
             ax[i].stairs(h, edges, color=col, lw=1.5, label='%s: mean %.1f, rms %.1f mrad' % (nm, x['dtheta']['mean'], x['dtheta']['rms']))
-        ax[i].axvspan(*ps, color='#e87ba4', alpha=0.3, label='pore-gas signal at Xe 3 bar (+%.1f / +%.1f)' % tuple(ps))
+        ax[i].axvspan(*ps, color='#e87ba4', alpha=0.3, label='pore-gas signal at Xe %g bar (+%.1f / +%.1f)' % (P_REF, *ps))
         ax[i].set_xlim(HIST_LO, 12); ax[i].set_yscale('log'); ax[i].set_ylim(1e-5, 1)
         ax[i].set_xlabel('θ_aero(p) − θ_aero(β = 1) [mrad]'); ax[i].set_ylabel('fraction of >= 80 % rings per mrad'); ax[i].grid(alpha=.3)
         ax[i].legend(fontsize=7); ax[i].set_title(title, loc='left', fontsize=10)
@@ -596,8 +710,8 @@ def figures(R, run_of, out):
     plt.tight_layout(); save(out, 'cosmic_rates_s61_layouts.png', dpi=130, fig=fig); plt.close(fig)
     # momentum handles
     fig, ax = plt.subplots(1, 2, figsize=(14, 4.8))
-    for j, (nm, title) in enumerate((('c3_f50_xe3_plain', 'Configuration 3, #%s (f = 50.8 mm), Xe 3 bar' % SHORT_F_KEY['f50']),
-                                     ('c4_xe3_g30_plain', 'Configuration 4b, Xe 3 bar, gap 30 mm'))):
+    for j, (nm, title) in enumerate((('c3_f50_%s_plain' % XREF, 'Configuration 3, #%s (f = 50.8 mm), Xe %g bar' % (SHORT_F_KEY['f50'], P_REF)),
+                                     ('c4_%s_g30_plain' % XREF, 'Configuration 4b, Xe %g bar, gap 30 mm' % P_REF))):
         h = R[nm]['tile_br'].get('handles')
         if h is None:
             continue
@@ -621,7 +735,7 @@ def figures(R, run_of, out):
             for r in h['gas_tag']:
                 ax[j].plot(r['rate_h'], r['rms'], 'D', color='#eb6834', label='Xe gas-ring tag, >= %d photons' % r['kmin'] if r['kmin'] == 1 else None)
                 ax[j].annotate('≥%d' % r['kmin'], (r['rate_h'], r['rms']), fontsize=7, xytext=(3, -9), textcoords='offset points')
-        ax[j].axhspan(*[1e3*x for x in pore_signal(PRESSURES[-1])], color='#e87ba4', alpha=0.25, label='pore-gas signal, Xe 3 bar')
+        ax[j].axhspan(*[1e3*x for x in pore_gas_signal(P_REF)], color='#e87ba4', alpha=0.25, label='pore-gas signal, Xe %g bar' % P_REF)
         ax[j].set_xscale('log'); ax[j].set_xlabel('>= 80 % rings per hour (telescope)'); ax[j].set_ylabel('velocity smear of the aerogel angle [mrad]')
         ax[j].set_yscale('log'); ax[j].grid(alpha=.3); ax[j].legend(fontsize=7); ax[j].set_title(title, loc='left', fontsize=10)
     plt.tight_layout(); save(out, 'cosmic_rates_handles.png', dpi=130, fig=fig); plt.close(fig)
@@ -630,7 +744,7 @@ def figures(R, run_of, out):
         [('2 air f%s' % k, 'c2_f%s_plain' % k, 'tile') for k in ('50', '76')] + \
         [('3 Xe %g f%s' % (P, k), 'c3_f%s_%s_plain' % (k, gas_label(P)), 'tile') for k in ('50', '76') for P in (1.0, 2.0, 3.0)] + \
         [('4a air g%d' % g, 'c4_air_g%d_plain' % g, 'tile') for g in (30, 50, 70)] + \
-        [('4b Xe 3 g%d' % g, 'c4_xe3_g%d_plain' % g, 'tile') for g in (30, 50, 70)] + \
+        [('4b Xe %g g%d' % (P_REF, g), 'c4_%s_g%d_plain' % (XREF, g), 'tile') for g in (30, 50, 70)] + \
         [('5 Xe %g gas' % P, 'c5_%s_plain_geo' % gas_label(P), 'gas') for P in (1.0, 2.0, 3.0)]
     fig, ax = plt.subplots(figsize=(15, 5))
     xx = np.arange(len(rows))

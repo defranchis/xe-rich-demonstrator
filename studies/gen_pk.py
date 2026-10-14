@@ -5,7 +5,7 @@ p > 0.3 GeV and |cos(theta)| < 0.9 are kept; the seed is int(sqrt(s)).
 """
 import numpy as np
 
-from xerich import cli
+from xerich import cli, provenance
 
 CFG = {
     '91':  (91.188, ['WeakSingleBoson:ffbar2gmZ = on', '23:onMode = off', '23:onIfAny = 1 2 3 4 5'], 'Z→qq̄'),
@@ -46,7 +46,7 @@ def main():
                 if P < P_MIN or abs(q.pz()/P) > COS_MAX:
                     continue
                 res[IDS[a]].append(P)
-    np.savez(out/f'mom_{key}.npz', N=nev, **{k: np.array(v) for k, v in res.items()})
+    np.savez(out/f'mom_{key}.npz', **provenance.npz(), N=nev, **{k: np.array(v) for k, v in res.items()})
     print(key, lab, nev, {k: len(v)/nev for k, v in res.items()})
 
 

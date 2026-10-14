@@ -23,8 +23,12 @@ SIMPLE = ('raytrace', 'cosmic_acc', 'cosmic_acc2', 'toy_aerogel', 'toy_scan', 't
           'plot_spectra', 'sketch', 'sketch_phase1')
 LEGACY_THC_MRAD = '63.6'   # fixed Xe Cherenkov angle of the legacy raytrace and cosmic_acc scripts [mrad]
 XE_INDEX = ('cosmic_acc2', 'toy_aerogel', 'toy_scan', 'toy_prox', 'plot_spectra', 'toy_plots', 'plot_lambda', 'plot_fcc')
-LEGACY_ARGS = {'raytrace': ('--thc-mrad', LEGACY_THC_MRAD), 'cosmic_acc': ('--thc-mrad', LEGACY_THC_MRAD, '--slope-term'),
-               'cosmic_acc2': ('--slope-term',), 'toy_prox': ('--legacy',)}
+LEGACY_P = ('--pressure', '3')   # Xe pressure of the legacy scripts [bar]; the drivers default to constants.P_REF
+LEGACY_GAS_YIELD = ('--gas-yield', '33.5')   # emitted Xe photons over 193 mm of the legacy toy_aerogel.py
+LEGACY_ARGS = {'raytrace': ('--thc-mrad', LEGACY_THC_MRAD, *LEGACY_P), 'cosmic_acc': ('--thc-mrad', LEGACY_THC_MRAD, '--slope-term', *LEGACY_P),
+               'cosmic_acc2': ('--slope-term',), 'toy_prox': ('--legacy', *LEGACY_P), 'toy_aerogel': (*LEGACY_P, *LEGACY_GAS_YIELD),
+               'toy_scan': (*LEGACY_P, *LEGACY_GAS_YIELD), 'toy_plots': LEGACY_P}
+PROVENANCE_KEY = 'provenance'   # xerich.provenance.KEY: the drivers' record of commit and inputs, absent in legacy/
 NUM = re.compile(r'[-+]?(?:\d+\.\d*|\.\d+|\d+)(?:[eE][-+]?\d+)?')
 
 
@@ -124,9 +128,10 @@ def compare(base, new):
         if not g.exists():
             rows.append((f.name, 'npz', 'MISSING')); ok = False; continue
         A, B = np.load(f), np.load(g)
-        if sorted(A.files) != sorted(B.files):
-            rows.append((f.name, 'npz keys', f'{A.files} vs {B.files}')); ok = False; continue
-        for k in A.files:
+        fa, fb = (sorted(k for k in Z.files if k != PROVENANCE_KEY) for Z in (A, B))
+        if fa != fb:
+            rows.append((f.name, 'npz keys', f'{fa} vs {fb}')); ok = False; continue
+        for k in fa:
             a, b = A[k], B[k]
             same = a.shape == b.shape and a.dtype == b.dtype and np.array_equal(a, b, equal_nan=True)
             ok &= same

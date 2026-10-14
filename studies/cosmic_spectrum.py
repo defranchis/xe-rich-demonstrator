@@ -18,10 +18,10 @@ import multiprocessing as mp  # noqa: E402
 
 import numpy as np  # noqa: E402
 
-from xerich import cli, cosmic, muons  # noqa: E402
+from xerich import cli, cosmic, muons, provenance  # noqa: E402
 from xerich.analysis import mc_rate  # noqa: E402
 from xerich.cherenkov import beta as beta_of, ftqe_angle_yield, p_threshold, pore_signal, qe_band, theta_c, theta_xe  # noqa: E402
-from xerich.constants import AEROGEL_N_AIR, COSMIC_I0, COSMIC_I0_PMIN, HC, M_MU, MIRROR_D, MIRROR_R, MUON_THMAX, SENSOR_HALF_2IN  # noqa: E402
+from xerich.constants import AEROGEL_N_AIR, COSMIC_I0, COSMIC_I0_PMIN, HC, M_MU, MIRROR_D, MIRROR_R, MUON_THMAX, P_REF, SENSOR_HALF_2IN  # noqa: E402
 from xerich.layout import Mirror, Phase1Layout, Sensor  # noqa: E402
 from xerich.media import n_xe, xenon  # noqa: E402
 from xerich.muon_data import BESS_LYNN_LAKE, BESS_LYNN_LAKE_COS, BESS_TSUKUBA, BESS_TSUKUBA_COS  # noqa: E402
@@ -207,7 +207,7 @@ def main():
     tasks = [(P, D, h, s) for P in (2.0, 3.0) for D, h in SEC5_ROWS for s in range(args.nseed)]
     with mp.get_context('fork').Pool(args.nproc) as pool:
         res = pool.map(task_sec5, tasks)
-        val = pool.map(task_val, [(k, z, x, pm, 3.0) for k, (z, x, pm) in enumerate(((0, 0, 10), (0, 30, 10), (3, 20, 10), (3, 25, 10), (3, 25, 2),
+        val = pool.map(task_val, [(k, z, x, pm, P_REF) for k, (z, x, pm) in enumerate(((0, 0, 10), (0, 30, 10), (3, 20, 10), (3, 25, 10), (3, 25, 2),
                                                                   (-3, 25, 3), (2, 15, 1.8), (5, 0, 5), (6, 0, 10), (4, -20, 2.5)))])
     R['sec5'] = {}
     print('\n== docs/design_options.md section 5 gas-ring rates [1/h], muons over a box at the mirror plane, L = %g mm, %d seeds (mean +- seed std) ==' % (SEC5_L, args.nseed))
@@ -221,13 +221,13 @@ def main():
                 P, D, 2*h/10, agg['legacy'][0], agg['legacy'][1], agg['fixed'][0], agg['fixed'][1], agg['beta1_spectrum'][0], agg['real_guan'][0], agg['real_guan'][1],
                 agg['real_reyna'][0], agg['real_shukla'][0], agg['real_shukla-eq10'][0], agg['real_cos2'][0], agg['legacy'][2], agg['fixed'][2], agg['real_guan'][2]))
     R['validation'] = val
-    print('\n== fast footprint model vs 3D tracer (3 bar, 3" f = 203.2 mm mirror, 5.08 cm SiPM) ==')
+    print('\n== fast footprint model vs 3D tracer (%g bar, 3" f = 203.2 mm mirror, 5.08 cm SiPM) ==' % P_REF)
     print(' zenith  x[mm]  p[GeV/c] theta[mrad] | fm fast  legacy  tracer | fs fast  legacy  tracer')
     for v in val:
         print(' %5.1f  %5.1f  %5.1f   %6.2f      | %.3f   %.3f   %.3f  | %.3f   %.3f   %.3f' % (v['zen'], v['x'], v['p'], v['thc_mrad'], v['fast_fm'], v['legacy_fm'], v['tracer_fm'],
                                                                                   v['fast_fs'], v['legacy_fs'], v['tracer_fs']))
     with open(out/'cosmic_spectrum.json', 'w') as fo:
-        json.dump(R, fo, indent=1)
+        json.dump(provenance.with_record(R, pressures=PRESSURES), fo, indent=1)
     figures(out, sp, c, p, tel, W)
     print('cores used: %d' % args.nproc)
 
@@ -316,8 +316,8 @@ def figures(out, sp, c, p, tel, W):
         bt, th, Y = _G['tab'][P]
         tp = np.interp(beta_of(pa, M_MU), bt, th)
         ax.plot(pa, np.where(tp > 0, 1e3*(tp-th[-1]), np.nan), color=COL['guan'], ls=ls, lw=1.5, label='Xe %g bar, FT×QE mean (no line: no light)' % P)
-    ps = [1e3*x for x in pore_signal(PRESSURES[-1])]
-    ax.axhspan(*ps, color='#1baf7a', alpha=0.2, label='pore-gas signal, Xe 3 bar (+%.1f / +%.1f mrad)' % tuple(ps))
+    ps = [1e3*x for x in pore_signal(P_REF)]
+    ax.axhspan(*ps, color='#1baf7a', alpha=0.2, label='pore-gas signal, Xe %g bar (+%.1f / +%.1f mrad)' % (P_REF, *ps))
     ax.set_xscale('log'); ax.set_ylim(-60, 12); ax.set_xlabel('p [GeV/c]'); ax.set_ylabel('θ(p) − θ(β = 1) [mrad]')
     ax.grid(alpha=.3); ax.legend(fontsize=8); ax.set_title('Cherenkov angle vs momentum', loc='left', fontsize=10)
     plt.tight_layout(); save(out, 'cosmic_spectrum_angle_vs_p.png', dpi=130, fig=fig); plt.close(fig)

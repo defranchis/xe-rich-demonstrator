@@ -3,15 +3,15 @@ import numpy as np
 from matplotlib.patches import Circle, Rectangle
 
 from .cherenkov import chromatic_rms, theta_c
-from .constants import (AEROGEL_HALF, AEROGEL_N_AIR, AEROGEL_T, MIRROR_D, MIRROR_R, PIXEL_PITCH,
+from .constants import (AEROGEL_HALF, AEROGEL_N_AIR, AEROGEL_T, MIRROR_D, MIRROR_R, P_REF, PIXEL_PITCH,
                         PIXEL_PITCH_FINE, SENSOR_HALF_PROTO)
 from .layout import Mirror, Phase1Layout
 from .media import Rayleigh, aerogel_index_air, n_xe
 from .plotting import AEROGEL as AER, GAS, GRID, INK, LIGHT, MIRROR as MIR, MUTED as MUT, SCINT, SCINT_EDGE, plt
 from .tracer import snell_angle
 
-P_GAS = 3.0       # Xe pressure of the drawn cones and rings [bar]
-P_LOW = 2.0       # second pressure shown as a ring [bar]
+P_GAS = P_REF     # Xe pressure of the drawn cones and rings [bar]
+P_ALT = 3.0       # second pressure shown as a ring [bar]
 LAM = 400.0       # wavelength of the drawn angles [nm]
 GAP = Phase1Layout.gap   # tile top face to the SiPM plane [mm]
 
@@ -21,7 +21,7 @@ def rayleigh_loss(lam_nm, t=AEROGEL_T):
     return 1-np.exp(-t/Rayleigh().length(lam_nm))
 
 
-def numbers(P=P_GAS, P2=P_LOW, lam=LAM):
+def numbers(P=P_GAS, P2=P_ALT, lam=LAM):
     """Angles [rad], ring radii and lengths [mm] and the other quoted numbers, all from the package models."""
     f = MIRROR_R/2; hs = SENSOR_HALF_PROTO; clear = Mirror(MIRROR_R, MIRROR_D).clear_radius
     n = n_xe(lam, P); n2 = n_xe(lam, P2)
@@ -78,7 +78,7 @@ def draw(aerogel=True):
 
     # side view
     ax.add_patch(Rectangle((-62, -22), 124, 262, fill=False, ec=MUT, lw=1.4, ls=(0, (6, 3))))
-    ax.text(70, 232, f'pressure vessel (dashed), Xe {P_LOW:g}–{P_GAS:g} bar', color=MUT, fontsize=9, va='center')
+    ax.text(70, 232, f'pressure vessel (dashed), Xe {min(P_GAS, P_ALT):g}–{max(P_GAS, P_ALT):g} bar', color=MUT, fontsize=9, va='center')
     xs = np.linspace(-a, a, 200); zs = R-np.sqrt(R*R-xs**2)
     ax.fill_between(xs, zs-5, zs, color=MIR, alpha=.85)
     ax.text(70, -4, f'spherical mirror\n{MIRROR_D:.1f} mm Ø, f = {f:.0f} mm\n(Edmund #43-584)', fontsize=8.5, color=INK, va='center')
@@ -126,7 +126,7 @@ def draw(aerogel=True):
     bx.add_patch(Circle(c0, k['r_gas'], fill=False, ec=GAS, lw=2))
     bx.text(13, 15, f'gas ring\n{P_GAS:g} bar, r = {k["r_gas"]:.1f} mm', color=GAS, fontsize=8.5, bbox=dict(fc='white', ec='none', pad=1))
     bx.add_patch(Circle(c0, k['r_gas2'], fill=False, ec=GAS, lw=1.2, ls=':'))
-    bx.text(-24, -23, f'{P_LOW:g} bar, r = {k["r_gas2"]:.1f} mm', color=GAS, fontsize=8, bbox=dict(fc='white', ec='none', pad=1))
+    bx.text(-24, -23, f'{P_ALT:g} bar, r = {k["r_gas2"]:.1f} mm', color=GAS, fontsize=8, bbox=dict(fc='white', ec='none', pad=1))
     if aerogel:
         bx.add_patch(Circle(c0, k['r_aero'], fill=False, ec=AER, lw=1.5, ls='--')); bx.text(20, -45, f'aerogel ring r ≈ {k["r_aero"]:.0f} mm', color=AER, fontsize=8.5)
     bx.plot(xt, 0, 'o', color=INK, ms=5); bx.text(xt+1.5, 1.5, 'μ', fontsize=9)

@@ -3,8 +3,8 @@
 Default: muons with momenta from the joint momentum-zenith spectrum (muons.MuonSpectrum) at their own zenith, the
 aerogel angle at each muon's velocity, the plain n = 1.03 tile with the two pore-gas variants alongside; the printed ring
 radii come from the same per-muon angles as the rates (median and 16-84 % of the muons with >= 80 % of the ring on the
-SiPM). --legacy: the beta = 1 toy quoted in docs/design_options.md section 6.2 (Xe 3 bar, pore shift 0.97 (n_gas - 1),
-radii from a fixed angle).
+SiPM). --legacy: the beta = 1 toy quoted in docs/design_options.md section 6.2 (quoted at Xe 3 bar, pore shift 0.97
+(n_gas - 1), radii from a fixed angle). Xe at --pressure (default constants.P_REF).
 """
 import os
 for _v in ('OPENBLAS_NUM_THREADS', 'OMP_NUM_THREADS', 'MKL_NUM_THREADS'):
@@ -24,16 +24,15 @@ from xerich.muons import SPECTRUM_DEFAULT, SPECTRUM_MODELS, MuonSpectrum, flux_t
 from xerich.sim import proximity, proximity_fractions  # noqa: E402
 from xerich.tracer import snell_angle  # noqa: E402
 
-P_BAR = 3
 LAM = 400                    # wavelength for the indices [nm]
 GAPS = (30, 50, 70)
 VARIANTS = ('plain', 'pore-vac', 'pore-air')
 _G = {}
 
 
-def legacy(model):
+def legacy(model, P):
     rng_mu = np.random.default_rng(7); rng_xy = np.random.default_rng(5)
-    ng = Radiator(P_BAR, model=model).n(LAM); aero = Aerogel(n=aerogel_index(ng)); sensor = Sensor(SENSOR_HALF_PROTO)
+    ng = Radiator(P, model=model).n(LAM); aero = Aerogel(n=aerogel_index(ng)); sensor = Sensor(SENSOR_HALF_PROTO)
     z0 = Mirror(MIRROR_R).f
 
     def sampler(n):
@@ -67,16 +66,15 @@ def run_case(case):
 
 
 def main():
-    p = cli.xe_index(cli.parser(__doc__))
-    p.add_argument('--legacy', action='store_true', help='beta = 1 toy of docs/design_options.md section 6.2 (Xe 3 bar, pore shift 0.97, fixed angle for radii)')
-    p.add_argument('--pressure', type=float, default=P_BAR, help='Xe pressure [bar abs] (default %(default)s)')
+    p = cli.pressure(cli.xe_index(cli.parser(__doc__)))
+    p.add_argument('--legacy', action='store_true', help='beta = 1 toy of docs/design_options.md section 6.2 (pore shift 0.97, fixed angle for radii)')
     p.add_argument('--spectrum', choices=SPECTRUM_MODELS, default=SPECTRUM_DEFAULT, help='muon spectrum (default %(default)s)')
     p.add_argument('--nmu', type=int, default=40000, help='muons (default 40000)')
     p.add_argument('--seed', type=int, default=7, help='seed of the muon directions (default 7)')
     p.add_argument('--nproc', type=int, default=8, help='worker processes (default 8)')
     args = p.parse_args()
     if args.legacy:
-        legacy(args.xe_index)
+        legacy(args.xe_index, args.pressure)
         return
     rng_mu = np.random.default_rng(args.seed); rng_xy = np.random.default_rng(args.seed+1); rng_p = np.random.default_rng(args.seed+2)
     sp = MuonSpectrum(args.spectrum)

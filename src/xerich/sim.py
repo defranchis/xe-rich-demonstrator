@@ -3,11 +3,13 @@
 - aberration: exact-sphere imaging of a Cherenkov cone (spherical aberration).
 - ring_rate_full, ring_rate_partial: cosmic gas-ring rates with a flat-mirror footprint.
 - MirrorToy: 3D toy of the mirror setup with an aerogel tile under the sensor.
-- proximity: proximity-focusing aerogel toy; proximity_fractions: its containment per muon at any Cherenkov angle.
+- proximity: proximity-focusing aerogel toy; proximity_fractions: its containment per muon at any Cherenkov angle;
+  proximity_rayleigh, proximity_photons: Rayleigh transmission and FT x response photons of its aerogel light.
 - track_segments, emit_photons, muon_photons, onaxis_muon: Cherenkov photons of one muon
   in a Phase1Layout, sampled in wavelength and traced with Fresnel optics and optional Rayleigh
   scattering in the tile (tracer.trace); window_cluster: the muon's own hit on the SiPM.
-No photodetection efficiency, reflectivity or absorption is applied.
+No photodetection efficiency, reflectivity or absorption is applied, except the response weight and Rayleigh
+transmission of proximity_rayleigh and proximity_photons.
 """
 from dataclasses import replace
 
@@ -15,13 +17,23 @@ import numpy as np
 
 from . import tracer
 from .analysis import azimuths, mc_rate, ring_fraction_in_square, ring_in_square
-from .cherenkov import theta_c
-from .constants import AERO_YIELD_PER_CM, GAS_YIELD_REF, GAS_YIELD_REF_LEN, HC, MUON_THMAX
+from .cherenkov import ftqe_angle_yield, qe_arc, qe_band, theta_c
+from .constants import (AERO_YIELD_PER_CM, AEROGEL_LAMBDA_REF, AEROGEL_T, GAS_YIELD_REF, GAS_YIELD_REF_LEN, HC, MUON_THMAX, P_REF,
+                        T_ROOM, YIELD_BAND_NM)
+from .media import XE_INDEX_DEFAULT, ConstantIndex, Rayleigh, aerogel_medium, n_xe
 from .muons import flux_through_square, sample_box
 
 UP = np.array([0, 0, 1.])
 DOWN = np.array([0, 0, -1.])
 CHUNK = 20000                # muons per vectorised block of the footprint model
+
+
+def gas_yield(P_bar, model=XE_INDEX_DEFAULT, T=T_ROOM):
+    """Emitted Xe photons over GAS_YIELD_REF_LEN at P_bar (beta = 1, YIELD_BAND_NM): GAS_YIELD_REF (Boerzsoenyi index at
+    P_REF) times the Frank-Tamm integral of (1 - 1/n^2)/lambda^2 of the index model at P_bar over that at P_REF."""
+    lam = np.linspace(*YIELD_BAND_NM, 2001)
+    ft = lambda P: np.trapezoid((1-1/n_xe(lam, P, T, model)**2)/lam**2, lam)
+    return GAS_YIELD_REF*float(ft(P_bar)/ft(P_REF))
 
 
 def aberration(h0, tilt, rng, mirror, L, th, n=4000):
@@ -134,8 +146,8 @@ class MirrorToy:
     azimuths; aerogel photons leaving through the tile sides are lost.
     """
 
-    def __init__(self, mirror, sensor, aerogel, n_gas, ns=8, nphi=90):
-        self.R = mirror.R; self.f = mirror.f; self.amir = mirror.clear_radius
+    def __init__(self, mirror, sensor, aerogel, n_gas, ns=8, nphi=90, gas_yield=GAS_YIELD_REF):
+        self.R = mirror.R; self.f = mirror.f; self.amir = mirror.clear_radius; self.gas_yield = gas_yield   # over GAS_YIELD_REF_LEN
         self.C = np.array([0, 0, self.R])
         self.T = aerogel.thickness; self.tile = aerogel.half; self.sens = sensor.half
         self.na = aerogel.n; self.ng = n_gas
@@ -208,7 +220,7 @@ class MirrorToy:
                 pe = p0+tg[:, k:k+1]*u
                 xy, ok = self.gas_image(pe, u, phi)
                 accg[:, k, :] = ok
-            fg = accg.mean((1, 2)); arcg = accg.any(1).mean(1); nemg = GAS_YIELD_REF*Lg/GAS_YIELD_REF_LEN
+            fg = accg.mean((1, 2)); arcg = accg.any(1).mean(1); nemg = self.gas_yield*Lg/GAS_YIELD_REF_LEN
             for key, v in zip(res, [th, fa, arc, fa*nemit, fg, arcg, fg*nemg]):
                 res[key].append(v)
         return {k: np.concatenate(v) for k, v in res.items()}
@@ -239,16 +251,19 @@ def proximity(aerogel, sensor, gap, n_gas, sampler, N=40000, ns=6, nphi=72, thma
     return rate*np.mean(fa >= .8), rate*np.mean(arc >= .5)
 
 
-def proximity_fractions(aerogel, sensor, gap, n_gas, u, p0, th, ns=6, nphi=72):
+def proximity_fractions(aerogel, sensor, gap, n_gas, u, p0, th, ns=6, nphi=72, points=False, paths=False):
     """Per muon: fraction of the aerogel photons on the sensor and of the azimuths hit, in the geometry of proximity.
 
     Muons (directions u, entry points p0 (N,3) on the tile top face z = 0) radiate at angle th in the tile, scalar or per
-    muon (0: no light). Returns (fa, arc).
+    muon (0: no light). Returns (fa, arc); points=True adds the sensor-plane points (N, ns, nphi, 3) of the ns emission
+    depths and nphi azimuths and the mask (N, ns, nphi) of those reaching the sensor; paths=True (with points) also the
+    path length [mm] in the tile from each emission point to the tile bottom face, T (1 - depth)/|d_z| (inf upwards).
     """
     N = len(u); th = np.broadcast_to(np.asarray(th, float), (N,))
     p0 = np.array(p0, float); p0[:, 2] = 0.0
     T = aerogel.thickness; tile = aerogel.half; sens = sensor.half
     phi = np.linspace(0, 2*np.pi, nphi, endpoint=False); acc = np.zeros((N, ns, nphi), bool)
+    pts = np.zeros((N, ns, nphi, 3)) if points else None
     e1, e2 = tracer.basis(u)
     d = (np.cos(th)[:, None, None]*u[:, None, :]+np.sin(th)[:, None, None]*(np.cos(phi)[None, :, None]*e1[:, None, :]
                                                                           + np.sin(phi)[None, :, None]*e2[:, None, :]))
@@ -260,7 +275,53 @@ def proximity_fractions(aerogel, sensor, gap, n_gas, u, p0, th, ns=6, nphi=72):
         with np.errstate(divide='ignore', invalid='ignore'):
             e = tracer.advance(pb, dg, -gap)
         acc[:, k] = okb&okr&(d[..., 2] < 0)&(th[:, None] > 0)&(np.abs(e[..., 0]) < sens)&(np.abs(e[..., 1]) < sens)
+        if points:
+            pts[:, k] = e
+    if points and paths:
+        fr = (np.arange(ns)+0.5)/ns
+        with np.errstate(divide='ignore'):
+            s = np.where(d[:, None, :, 2] < 0, T*(1-fr)[None, :, None]/np.abs(d[:, None, :, 2]), np.inf)
+        return acc.mean((1, 2)), acc.any(1).mean(1), pts, acc, s
+    if points:
+        return acc.mean((1, 2)), acc.any(1).mean(1), pts, acc
     return acc.mean((1, 2)), acc.any(1).mean(1)
+
+
+def proximity_rayleigh(n, weight, ndepth=200, ngrid=2001):
+    """Mean transmission of the aerogel photons from a uniform emission depth to the tile bottom (vertical muon, angle
+    theta_c(n), Rayleigh length media.Rayleigh()), averaged over the Frank-Tamm x weight(E) spectrum on the QE band."""
+    E = np.linspace(*qe_band(), ngrid); w = weight(E); L = Rayleigh().length(HC/E)
+    s = AEROGEL_T/np.cos(theta_c(n))*(np.arange(ndepth)+0.5)/ndepth
+    return float(np.sum(w*np.exp(-s[:, None]/L[None, :]).mean(0))/w.sum())
+
+
+def rayleigh_transmission(s, weight=qe_arc, index=None, ngrid=2001):
+    """Mean Rayleigh transmission exp(-s/Lambda(lambda)) (media.Rayleigh()) of aerogel photons over path lengths s [mm] in
+    the tile (any shape), averaged over the beta = 1 Frank-Tamm x weight(E) spectrum on the QE band; index n(lambda [nm])
+    (None: a constant index, spectrum flat in E)."""
+    E = np.linspace(*qe_band(), ngrid); w = weight(E); L = Rayleigh().length(HC/E)
+    if index is not None:
+        w = w*(1-1/index(HC/E)**2)
+    s = np.asarray(s, float)
+    return (np.exp(-s.reshape(-1)[:, None]/L[None, :])@w/w.sum()).reshape(s.shape)
+
+
+def rayleigh_transmission_table(weight=qe_arc, index=None, s_max=400.0, nstep=4000):
+    """rayleigh_transmission as a function of s, linear between nstep + 1 nodes on [0, s_max] [mm] (longer paths: the
+    value at s_max; s = inf: 0)."""
+    s = np.linspace(0.0, s_max, nstep+1); t = rayleigh_transmission(s, weight, index)
+    return lambda x: np.where(np.isfinite(x), np.interp(x, s, t), 0.0)
+
+
+PROX_BETA = np.r_[1-np.geomspace(1e-7, 0.1, 2000)[::-1], 1.0]   # velocity grid of the proximity_photons yield table
+
+
+def proximity_photons(n, beta, c, weight=qe_arc, model='constant', lam_ref=AEROGEL_LAMBDA_REF):
+    """FT x weight(E) photons per muon emitted along the tile path T/c (velocities beta, cos zenith c) on the QE band, tile
+    index n ('constant') or the media.aerogel_medium dispersion equal to n at lam_ref [nm]; the yield is interpolated on
+    PROX_BETA. Times proximity_rayleigh: the photons leaving the tile bottom."""
+    idx = ConstantIndex(n) if model == 'constant' else aerogel_medium(model, n, lam_ref).index
+    return np.interp(beta, PROX_BETA, ftqe_angle_yield(idx, PROX_BETA, weight)[1])*AEROGEL_T/c
 
 
 def _box_interval(p0, u, lo, hi, s_end):

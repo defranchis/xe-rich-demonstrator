@@ -245,11 +245,13 @@ class Slab:
 
 @dataclass(frozen=True)
 class SphereMirror:
-    """Spherical mirror cap: centre C, radius R, unit axis from the vertex to C, clear-aperture radius, reflectivity 1."""
+    """Spherical mirror cap: centre C, radius R, unit axis from the vertex to C, clear-aperture radius and reflectivity
+    R(lambda [nm]) (None: 1)."""
     C: tuple
     R: float
     axis: tuple
     clear_radius: float
+    reflectivity: object = None
 
 
 @dataclass(frozen=True)
@@ -271,6 +273,7 @@ class Scene:
 
 
 REASONS = ('detected', 'mirror aperture', 'tile sides', 'outside sensor', 'interaction cap', 'escaped', 'surface loss')
+REASONS_ALL = REASONS+('mirror absorption',)   # with a mirror reflectivity below 1 (kept out of REASONS, whose length sizes outputs)
 CLASSES = ('direct', 'bottom', 'top', 'TIR', 'multiple', 'scattered')
 _EV_NONE, _EV_SENSOR, _EV_MIRROR, _EV_EXIT, _EV_ENTRY, _EV_SCATTER = -1, 0, 1, 2, 3, 4
 
@@ -333,6 +336,9 @@ def trace(scene, p, d, lam, region, E=None, max_reflections=2, max_interactions=
     direction d, path class cls (index into CLASSES), interaction count nint and Rayleigh-scatter
     count nsc; with record=True also path, a list of the (K,3) vertices of each branch from its
     start point to its end point (vertices of branches that escape end at the last interaction).
+    A mirror with a reflectivity R(lambda) splits each reflection into a reflected branch (weight x R) and an absorbed one
+    (weight x (1 - R), reason 'mirror absorption', index len(REASONS) into REASONS_ALL); the output then also holds wr,
+    the product of the reflectivities along each branch, so that w/wr is the weight without the mirror losses.
     """
     M = len(p); zi = np.zeros(M, np.int16)
     st = dict(i=np.arange(M), p=np.asarray(p, float), d=np.asarray(d, float), lam=np.asarray(lam, float),
@@ -340,6 +346,9 @@ def trace(scene, p, d, lam, region, E=None, max_reflections=2, max_interactions=
               nsc=zi.copy(), E=None if E is None else np.asarray(E, complex))
     ends = []
     sen = scene.sensor; mir = scene.mirror
+    refl = mir is not None and mir.reflectivity is not None
+    if refl:
+        st['wr'] = np.ones(M)
     scat = [j for j, sl in enumerate(scene.slabs) if sl.scatter is not None]
     if scat and rng is None:
         raise ValueError('Rayleigh scattering needs a random generator rng')
@@ -353,6 +362,8 @@ def trace(scene, p, d, lam, region, E=None, max_reflections=2, max_interactions=
         if len(sub['i']):
             end = dict(i=sub['i'], reason=np.full(len(sub['i']), reason, np.int8), w=sub['w'], p=sub['p'], d=sub['d'],
                        cls=path_class(sub['nb'], sub['nt'], sub['ntir'], sub['nsc']), nint=sub['nint'], nsc=sub['nsc'])
+            if refl:
+                end['wr'] = sub['wr']
             if record:
                 end['bid'] = sub['bid']
             ends.append(end)
@@ -422,6 +433,14 @@ def trace(scene, p, d, lam, region, E=None, max_reflections=2, max_interactions=
         nxt = []
         if mm.any():
             r = _take(st, mm); nrm = (r['p']-np.asarray(mir.C))/mir.R
+            if refl:
+                Rm = np.asarray(mir.reflectivity(r['lam']), float)
+                lost = dict(r); lost['w'] = r['w']*(1-Rm)
+                if record:
+                    k = len(lost['i']); lost['bid'] = np.arange(len(parent), len(parent)+k)
+                    parent += list(r['bid']); split += [step]*k
+                finish(lost, len(REASONS))
+                r['w'] = r['w']*Rm; r['wr'] = r['wr']*Rm
             r['d'] = reflect(r['d'], nrm)
             if r['E'] is not None:
                 r['E'] = mirror_field(r['E'], nrm)

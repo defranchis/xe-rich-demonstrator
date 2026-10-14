@@ -1,34 +1,34 @@
-"""3D geometric toy of the mirror setup with an aerogel tile under the SiPM, Xe at 3 bar.
+"""3D geometric toy of the mirror setup with an aerogel tile under the SiPM, Xe at --pressure.
 
 Acceptance of aerogel and gas light for cosmic muons crossing the SiPM, for a 3" and a
 6" mirror (stdout, toy_76.npz, toy_152.npz).
 """
 import numpy as np
 
-from xerich import cli
+from xerich import cli, provenance
 from xerich.cherenkov import theta_c
 from xerich.constants import MIRROR_R, MUON_THMAX, SENSOR_HALF_2IN
 from xerich.layout import Aerogel, Mirror, Radiator, Sensor
 from xerich.media import aerogel_index
 from xerich.muons import flux_through_square, sample_cos3
-from xerich.sim import MirrorToy
+from xerich.sim import MirrorToy, gas_yield
 
-P_BAR = 3
 LAM = 400                    # wavelength for the indices [nm]
 N_MU = 20000
 
 
 def main():
-    args = cli.xe_index(cli.parser(__doc__)).parse_args(); out = cli.outdir(args)
+    args = cli.gas_yield(cli.pressure(cli.porosity(cli.xe_index(cli.parser(__doc__))))).parse_args(); out = cli.outdir(args)
     rng = np.random.default_rng(7)
-    ng = Radiator(P_BAR, model=args.xe_index).n(LAM)
-    aero = Aerogel(n=aerogel_index(ng)); sensor = Sensor(SENSOR_HALF_2IN)
+    ng = Radiator(args.pressure, model=args.xe_index).n(LAM)
+    gy = args.gas_yield if args.gas_yield is not None else gas_yield(args.pressure, args.xe_index)
+    aero = Aerogel(n=aerogel_index(ng, porosity=args.porosity)); sensor = Sensor(SENSOR_HALF_2IN)
     flux_hz = flux_through_square(2*sensor.half*1e-3, MUON_THMAX)
     print('n_gas=%.5f n_aero=%.4f theta_aero=%.1f mrad theta_gas=%.1f mrad; muons through 5.1x5.1 cm SiPM: %.0f /h'
           % (ng, aero.n, 1e3*theta_c(aero.n), 1e3*theta_c(ng), flux_hz*3600))
     for D in (76.2, 152.4):
         mirror = Mirror(MIRROR_R, D)
-        toy = MirrorToy(mirror, sensor, aero, ng)
+        toy = MirrorToy(mirror, sensor, aero, ng, gas_yield=gy)
         r = toy.run(N_MU, lambda n: sample_cos3(rng, n, sensor.half, toy.f, MUON_THMAX))
         print('\nmirror %.1f mm (clear r=%.1f mm)' % (D, mirror.clear_radius))
         for lab, fr, arc, n in (('aerogel', r['fa'], r['arc_a'], r['na']), ('gas', r['fg'], r['arc_g'], r['ng'])):
@@ -47,7 +47,7 @@ def main():
                 continue
             print('  %2d-%2d deg   : %5.3f     %5.3f        %5.3f        %5.3f'
                   % (bins[b], bins[b+1], m.mean(), r['fa'][m].mean(), np.mean(r['arc_a'][m] >= .25), r['fg'][m].mean()))
-        np.savez(out/('toy_%d.npz' % int(D)), **r)
+        np.savez(out/('toy_%d.npz' % int(D)), **r, **provenance.npz())
 
 
 if __name__ == '__main__':

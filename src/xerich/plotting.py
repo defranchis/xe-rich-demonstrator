@@ -6,6 +6,7 @@ matplotlib.use('Agg')
 import matplotlib.pyplot as plt  # noqa: E402
 import numpy as np  # noqa: E402
 
+from . import provenance  # noqa: E402
 from .constants import HC  # noqa: E402
 
 # Setup drawings
@@ -30,7 +31,8 @@ def lambda_axis(ax, ticks=(200, 250, 300, 400, 600)):
 
 
 def save(outdir, name, dpi=140, fig=None):
-    """Save the figure (default: current) as outdir/name; returns the path."""
+    """Save the figure (default: current) as outdir/name, with the provenance record in its PNG metadata; returns the path."""
     path = Path(outdir)/name
-    (fig or plt.gcf()).savefig(path, dpi=dpi)
+    meta = {'Description': provenance.md_line()} if path.suffix.lower() == '.png' else None
+    (fig or plt.gcf()).savefig(path, dpi=dpi, metadata=meta)
     return path

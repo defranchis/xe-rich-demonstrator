@@ -2,7 +2,9 @@
 
 This summarises the design exploration for a lab pre-demonstrator of pressurised xenon as the ARC gas radiator (the demonstrator proper is the later set-up with all the ARC baseline specifications). The study drivers in `studies/` produce every number quoted here and the corresponding plots; the [README](../README.md) lists their outputs and the assumptions and simplifications.
 
-**Status in one paragraph.** The plan has five configurations (§7). (1) Gas-ring imaging with cosmic muons: a stock 3" spherical mirror with f ≈ 203 mm, a 2" × 2" SiPM plane at its focus and ~20 cm of Xe at 2–3 bar. (2, 3) The aerogel ring imaged with a short-focal-length mirror, in air and in Xe, which measures how Xe in the pores shifts the aerogel index. (4) The same comparison by proximity focusing, without a mirror, in air and in Xe. (5) The full set-up: configuration 1 with the 1 cm aerogel tile 1 mm in front of the SiPM; the aerogel ring is not imaged in this geometry (for near-vertical muons its light misses the mirror, §6.1), and the tile Rayleigh-scatters about a fifth of the gas-ring photons (§6.3). A full-size, ARC-like cell needs a custom mirror and is left for later.
+**Status in one paragraph.** The plan has five configurations (§7). (1) Gas-ring imaging with cosmic muons: a stock 3" spherical mirror with f ≈ 203 mm, a 2" × 2" SiPM plane at its focus and ~20 cm of Xe at the reference pressure of 2 bar (1–3 bar scanned). (2, 3) The aerogel ring imaged with a short-focal-length mirror, in air and in Xe, which measures how Xe in the pores shifts the aerogel index. (4) The same comparison by proximity focusing, without a mirror, in air and in Xe. (5) The full set-up: configuration 1 with the 1 cm aerogel tile 1 mm in front of the SiPM; the aerogel ring is not imaged in this geometry (for near-vertical muons its light misses the mirror, §6.1), and the tile Rayleigh-scatters about a fifth of the gas-ring photons (§6.3). A full-size, ARC-like cell needs a custom mirror and is left for later.
+
+**Reference pressure.** Xe 2 bar (`constants.P_REF`, the default of the drivers). Numbers still quoted at 3 bar say so, with the driver option that reproduces them.
 
 ---
 
@@ -77,7 +79,7 @@ Signal processes only, with |cosθ| < 0.9:
 - The ring centre on the sensor sits at f·tanθ_track, independent of where the track crosses. It moves by ~3.5 mm per degree of track tilt.
 - A track illuminates a patch of the mirror of radius L·tanθc, where L is the radiator length. That is ≈ 13 mm at 3 bar with L = 20 cm.
 
-### 2.3 Spherical aberration (`raytrace.py`, f = 203 mm, 3 bar)
+### 2.3 Spherical aberration (`raytrace.py --pressure 3`, f = 203 mm, 3 bar)
 | Track offset from the mirror axis | Outermost mirror radius hit | Ring smearing, rms per photon |
 |---|---|---|
 | 0 | 13 mm | 0.03 mrad |
@@ -140,7 +142,18 @@ Notes:
 - Baseline: the published ARC prototype board, 2" × 2" with four Hamamatsu SiPM arrays of 8 × 8 SiPMs (3 × 3 mm² pads at 3.2 mm pitch, 256 channels). With the packages abutting, the pads span 51.2 mm (= 16 × 3.2 mm, the scripts' grid) within a 51.6 mm outline; across the package seams the pad pitch is 3.4 mm. The front end is ALCOR (INFN-BO front-end boards). The cooled baseboard is a ceramic PCB with internal coolant flow, designed for −60 to −80 °C (Pezzulo et al.; Cardinale, slide 11); the pre-demonstrator runs it at −20 °C, the lower end of the arrays' datasheet range.
 - Part number: Hamamatsu S13361-3050NE-08 is the one given for the first baseboard version (Cardinale, slide 10), and is to be confirmed for the ceramic board's arrays, like the window values below.
 - Window: the S13361 datasheet gives an epoxy window of refractive index 1.55 and resin thickness 0.1 ± 0.05 mm. These are datasheet values, still to be confirmed for the arrays on the board.
-- Response: 320–900 nm, PDE 40 % at 450 nm at 3 V overvoltage (datasheet). The datasheet operating range is −20 to +60 °C without dew condensation.
+- Response: 320–900 nm; typical PDE curve at 25 °C and 3 V overvoltage, peak 40.2 % at 460 nm, 39.95 % at 450 nm (datasheet KAPD1054E07, read from its figure). The datasheet operating range is −20 to +60 °C without dew condensation.
+- **Input card: the defaults of `cosmic_rates.py` are the validated baseline** (`cli.BASELINE`, values from the named constants; README, model assumptions), at Xe 2 bar (`constants.P_REF`) with ring hits that leave out the muon's pad and `--nphot 7200`. The tables published before it used the ARC QE, a continuous 2" square, reflectivity 1, a constant tile index, porosity 0.97, no board reflection and a vertical-muon Rayleigh factor in configuration 4; `--preset published` reproduces that model. The values and their status:
+  - PDE (`--response s13361`): the typical curve above, through the window. Datasheet; not at the operating temperature and overvoltage.
+  - Board (`--sensor-model board`): 2 × 2 abutting packages of 25.8 mm (footprint 51.6 mm), 8 × 8 pads of 3.0 mm at 3.2 mm pitch, 0.2 mm from the package edge; active fraction 0.879 inside ±25.6 mm, 0.865 of the footprint. Datasheet outline; abutting packages assumed. Containment and arcs use the footprint, photon counts the active pads.
+  - Ring hits: binary pad hits, P = 1 − exp(−μ_pad) per pad, of the unscattered ring photons, without the pad crossed by the muon; no crosstalk, dark counts or afterpulses. Assumed. Sampled with 7200 tile photons per muon (pad statistics biased low with fewer).
+  - Mirror reflectivity (`--mirror-r nominal`): 0.89 at 250–450 nm, 0.87 at 700 nm, 0.82 at 800–850 nm, 0.85 at 950 nm, linear in between. Assumed from the vendor spec (Ravg > 89 % at 250–450 nm, > 85 % at 250–700 nm); placeholder for the measured curve.
+  - Aerogel dispersion: single pole, λ₀ = 83.22 nm (Bellunato et al.), equal to the run's tile index at 400 nm. Literature shape, assumed for this tile.
+  - Porosity 0.935 (`--porosity-vac`, from the tile density, §6.3) and pore-gas temperature 293.15 K (`--pore-t`, `constants.T_PORE`). Placeholders until the vendor data and the box thermal state are known.
+  - Ring definitions stay geometric (a ring counts from its light in the ARC QE band whatever the response), as in the published tables.
+  - Configuration 4, Rayleigh scattering in the tile (`--prox-rayleigh per-photon`): each photon direction is attenuated along its own path from the emission depth to the tile exit, averaged over the FT × PDE spectrum of the run's tile index, for the photon counts and the pad hits alike, with the β = 1 FT × PDE spectrum for every muon (a vertical muon's photons keep 0.933 with the single-pole index, 0.934 with a constant one; at Xe 2 bar the photons of the ≥ 80 % rings keep 0.929 / 0.932 / 0.933 at gaps 30 / 50 / 70 mm). Known approximation, not corrected: the configuration-4 containment and pads use one Cherenkov angle, at n = 1.03, while the yield uses the dispersive index; this underestimates the ≥ 80 % ring rate by up to about 2 %, growing with the gap.
+  - Board reflectance (`--board-r-spec`, `--board-r-diff`; defaults 0.11 and 0.10, `constants.BOARD_R_SPEC`, `BOARD_R_DIFF`): specular 0.11 (range 0.08–0.14) and diffuse (Lambertian) 0.10, flat in wavelength. Source: Congedo et al., arXiv:2602.20139, Sec. 3.1, Table 1: S13361-3050 and -2050 8 × 8 arrays (50 µm cells, epoxy, no window) in an integrating sphere at 8°: total reflectance 18–24 % above 380 nm, diffuse 6–10 % (about 10 % for the 50 µm epoxy arrays), specular = total − diffuse (the caption of the paper's Fig. 6 names the S13360 series, an inconsistency of the paper). Literature measurement of the same part; to be confirmed on our board. The light on the footprint is shared into detected (PDE, per incident photon), reflected and absorbed, so the ring hits are unchanged; the reflected light (two board reflections, through the same mirror and tile) is other light, never ring hits. Not modelled: the drop of the reflectance below about 380 nm (15–18 % of the reflected detected light lies there, so the flat model overestimates it by up to that share), reflection beyond the 51.6 mm footprint, the vessel walls, and configuration 4 (no mirror: the light returning to the board is 0.23 / 0.06 / 0.01 % of the ring photons at gaps 30 / 50 / 70 mm for vertical muons, `scripts/investigations/board_reflection/config4_size.py`).
+  - Results with the defaults at Xe 2 bar: **[PLACEHOLDER: board table from the full-statistics reruns at `--nphot 7200`, to be filled in]**
 - Alternative: a 0.8 mm pitch, as in the ARC simulation.
 
 | Pixel pitch | Pixel term per photon at f = 203 mm |
@@ -156,7 +169,7 @@ Assumptions (`cosmic_spectrum.py`, `cosmic_rates.py`):
 - Muons from the momentum–zenith parametrisation of Guan et al. (arXiv:1509.06176), each at its own β: 60 m⁻²s⁻¹sr⁻¹ above 1 GeV/c (Reyna 70, Shukla–Sankrith 58; the PDG 2022 review quotes ≈ 70, with recent measurements 10–15 % lower). Against cos²θ, the zenith law changes the ring rates by < 0.3 %.
 - Sea level, no roof, no altitude or geomagnetic correction (CERN is at ≈ 450 m). The BESS spectrum at Lynn Lake (360 m, cutoff 0.4 GV) lies 14–20 % above the Guan model below 5 GeV/c and about 6 % below it above; this affects the trigger and aerogel-ring rates more than the gas-ring rates (p > 1.6–2.8 GeV/c).
 - Trigger telescope, idealised: 5 × 5 cm at the SiPM plane and 8 × 8 cm at the mirror vertex plane, 105 muons per hour (88 for β = 1 muons with cos²θ and I0 = 70 above 1 GeV/c). Real counters sit above the SiPM and below the mirror, which lowers the rates (§8). The threshold at the UV edge of the QE band (264 nm) is 2.75 / 1.94 / 1.58 GeV/c at 1 / 2 / 3 bar; 41 / 53 / 59 % of the telescope muons are above it.
-- A ≥ 80 % ring has ≥ 80 % of its sampled photons on the mirror and ≥ 80 % of the ring on the SiPM; a full ring has ≥ 99 % on both. FT×QE photons are Frank–Tamm photons weighted by the SiPM quantum efficiency (the QE table of the ARC simulation, a placeholder until the SiPM is chosen; no window), without Rayleigh-scattered photons. The tracer estimates them per muon from its sampled photons, so cuts such as "≥ 10 photons" are approximate for rings whose count is near the cut.
+- A ≥ 80 % ring has ≥ 80 % of its sampled photons on the mirror and ≥ 80 % of the ring on the SiPM; a full ring has ≥ 99 % on both. FT×QE photons are Frank–Tamm photons weighted by the SiPM quantum efficiency (the QE table of the ARC simulation; no window), without Rayleigh-scattered photons. The tables of §5 and §6 use this published model (`--preset published`), not the §4 input card. The tracer estimates them per muon from its sampled photons, so cuts such as "≥ 10 photons" are approximate for rings whose count is near the cut.
 
 3D tracer, 3" mirror (f = 203 mm), 2" SiPM, through the telescope (5 seeds, seed spread 0.2–0.3 per hour):
 
@@ -165,33 +178,33 @@ Assumptions (`cosmic_spectrum.py`, `cosmic_rates.py`):
 | ≥ 80 % rings per hour | 9.4 | 9.9 | 9.1 |
 | full rings per hour | 7.6 | 6.8 | 5.6 |
 | ≥ 80 % rings per hour with ≥ 10 FT×QE photons | 3.7 | 7.3 | 7.6 |
-| FT×QE photons per ≥ 80 % ring | 7.9 | 15.9 | 24.1 |
+| FT×QE photons per ≥ 80 % ring (with the board: on active pads, the muon's pad included) | 7.9 | 15.9 | 24.1 |
 
 - Reyna and Shukla–Sankrith change the ≥ 80 % rates by +14 to +17 % and −5 to −10 %; β = 1 muons (cos²θ, I0 = 70) give 17.0 / 13.0 / 10.1 per hour.
 - **The SiPM limits the angular acceptance.** Full rings need |θ_μ| ≲ 3.6° for a 5 cm sensor (atan((half sensor − ring radius)/f) at 400 nm, 3 bar).
-- **The mirror limits the position acceptance:** about ±2.1 cm for a 3" mirror without the tile and ±2.2 cm with it (clear radius − L·tanθc).
+- **The mirror limits the position acceptance:** about ±2.1 cm for a 3" mirror without the tile and ±2.2 cm with it (clear radius − L·tanθc, 3 bar).
 
 Mirror and SiPM size (`cosmic_spectrum.py`; muons up to 25° from vertical over a square at the mirror plane that contains every track able to give a ring, radiator 190 mm; not comparable with the telescope table), ≥ 80 % rings per hour:
 
-| Mirror | SiPM | 3 bar, β = 1 | 3 bar, Guan | 2 bar, β = 1 | 2 bar, Guan | Full rings, 3 bar, Guan |
+| Mirror | SiPM | 2 bar, β = 1 | 2 bar, Guan | 3 bar, β = 1 | 3 bar, Guan | Full rings, 3 bar, Guan |
 |---|---|---|---|---|---|---|
-| 2" | 5.1 cm | 5.0 | 5.4 | 7.0 | 6.1 | 2.8 |
-| **3"** | **5.1 cm** | **13.3** | **13.5** | **19.3** | **16.1** | **8.4** |
-| 3" | 4 cm | 5.0 | 6.2 | 8.3 | 8.0 | 3.7 |
-| 3" | 8 cm | 53.7 | 46.0 | 65.4 | 47.4 | 28.9 |
+| 2" | 5.1 cm | 7.0 | 6.1 | 5.0 | 5.4 | 2.8 |
+| **3"** | **5.1 cm** | **19.3** | **16.1** | **13.3** | **13.5** | **8.4** |
+| 3" | 4 cm | 8.3 | 8.0 | 5.0 | 6.2 | 3.7 |
+| 3" | 8 cm | 65.4 | 47.4 | 53.7 | 46.0 | 28.9 |
 
-- The β = 1 mirror scan of `cosmic_acc.py` (3 bar, 8 cm sensor, L = 200 mm; rings entirely on the sensor with all / ≥ 80 % of the photons on the mirror, per hour): 2" 6/17, 3" 27/46, 4" 59/91, 6" 173/216, 20 cm 333/396, ARC 26 cm 776/893 (at 63.6 mrad; statistical errors up to about 12 per hour). A larger mirror increases the rate roughly with its area until the sensor angle cut takes over. Much of the extra rate from large f/1 mirrors is only good for photon counting.
+- The β = 1 mirror scan of `cosmic_acc.py --pressure 3` (3 bar, 8 cm sensor, L = 200 mm; rings entirely on the sensor with all / ≥ 80 % of the photons on the mirror, per hour): 2" 6/17, 3" 27/46, 4" 59/91, 6" 173/216, 20 cm 333/396, ARC 26 cm 776/893 (at 63.6 mrad; statistical errors up to about 12 per hour). A larger mirror increases the rate roughly with its area until the sensor angle cut takes over. Much of the extra rate from large f/1 mirrors is only good for photon counting.
 
 ---
 
 ## 6. Aerogel
 ### 6.1 With the f = 203 mm mirror (configuration 5): not imaged (`cosmic_rates.py --groups s61`, `toy_aerogel.py`, `toy_scan.py`)
-- θ_aero = 242 mrad inside the tile for n = 1.03 (249 mrad in the gas, the value used for the distances below); `toy_aerogel.py` and `toy_scan.py` add the Xe pore shift (n ≈ 1.032 at 3 bar, 250 mrad in the tile).
+- θ_aero = 242 mrad inside the tile for n = 1.03 (249 mrad in the gas, the value used for the distances below); `toy_aerogel.py` and `toy_scan.py` add the Xe pore shift (with `--pressure 3`: n ≈ 1.032, 250 mrad in the tile).
 - After ~19 cm of gas the photons are ~48 mm from the track, which **misses the 3" mirror**. The imaged ring would have **r ≈ 52 mm**, which **misses the 5 cm SiPM**.
 - For β = 1 muons with a 3" mirror and a 5.1 cm SiPM, only muons at 6–22° put aerogel light on the sensor: ≤ ~3.5 emitted photons per muon (~1 detected), on an arc of ≤ 20 % of the ring (median 12 %).
 - Gas rings need muons within ~8° of vertical, so gas and aerogel light never appear in the same event.
 
-3D tracer, Xe 3 bar, n = 1.03 tile, muons uniform over the 5 × 5 cm tile (985 per hour for β = 1, 1152 with the spectrum). Rates per hour, β = 1 → spectrum (each muon at its own β):
+3D tracer, Xe 3 bar (`cosmic_rates.py --groups s61` at 435dd80; it now runs these layouts at `P_REF`), n = 1.03 tile, muons uniform over the 5 × 5 cm tile (985 per hour for β = 1, 1152 with the spectrum). Rates per hour, β = 1 → spectrum (each muon at its own β):
 
 | SiPM | Mirror Ø | Aerogel arcs ≥ 50 % | Full aerogel rings | Gas rings (≥ 80 % of the emitted photons on the SiPM) |
 |---|---|---|---|---|
@@ -209,7 +222,7 @@ Mirror and SiPM size (`cosmic_spectrum.py`; muons up to 25° from vertical over 
 - A statistical measurement from the arcs would need external tracking of the muon direction at the mrad level.
 
 ### 6.2 Proximity focusing: configuration 4 (`cosmic_rates.py --groups c4`, `toy_prox.py`)
-Aerogel tile → gas gap (air or Xe) → 2" SiPM, no mirror; plain n = 1.03 tile, each muon at its own β. Per hour: ≥ 80 % rings through the telescope (β = 1 in brackets) and arcs ≥ 50 % of the muons through the tile (half of the azimuths lit from at least one of six emission depths); radii (inner–outer at the median gas angle) from `toy_prox.py`, Xe 3 bar.
+Aerogel tile → gas gap (air or Xe) → 2" SiPM, no mirror; plain n = 1.03 tile, each muon at its own β. Per hour: ≥ 80 % rings through the telescope (β = 1 in brackets) and arcs ≥ 50 % of the muons through the tile (half of the azimuths lit from at least one of six emission depths); radii (inner–outer at the median gas angle) from `toy_prox.py --pressure 3`, Xe 3 bar.
 
 | Gap | Ring radius | Air | Xe 3 bar | Arcs ≥ 50 % per hour (air) |
 |---|---|---|---|---|
@@ -220,7 +233,7 @@ Aerogel tile → gas gap (air or Xe) → 2" SiPM, no mirror; plain n = 1.03 tile
 - Xe in the pores (§6.3) lowers the Xe 3 bar ≥ 80 % rates by 2–12 %.
 - The aerogel threshold for muons is ~0.43 GeV/c, so nearly every triggered muon radiates (91 % of the §5 telescope muons are above it).
 - Median ring angle in the gas: 245 mrad (16–84 %: 210–249 mrad at 30 mm); the velocity shifts the aerogel angle in the tile by −21 mrad on average (rms 38 mrad). Estimators for the Xe-minus-air comparison: §7.
-- The β = 1 toy (`toy_prox.py --legacy`: Xe 3 bar, pore shift 0.97 (n_gas − 1), radii from the fixed 0.249 rad) gives radii of 8–10 / 13–15 / 18–20 mm, 193 / 69 / 18 rings ≥ 80 % and 376 / 208 / 104 arcs ≥ 50 % per hour on the 5.1 cm SiPM at 30 / 50 / 70 mm.
+- The β = 1 toy (`toy_prox.py --legacy --pressure 3`: Xe 3 bar, pore shift 0.97 (n_gas − 1), radii from the fixed 0.249 rad) gives radii of 8–10 / 13–15 / 18–20 mm, 193 / 69 / 18 rings ≥ 80 % and 376 / 208 / 104 arcs ≥ 50 % per hour on the 5.1 cm SiPM at 30 / 50 / 70 mm.
 
 ### 6.3 Aerogel index with Xe in the pores
 - Expected shift: Δn ≈ porosity × (n_Xe − n_air), with a porosity of ≈ 0.935 for n = 1.03 (ρ ≈ 0.14 g/cm³). At 400 nm:
@@ -241,7 +254,7 @@ Five configurations, in an order still to be decided (§8). Configurations 1 and
 1. **Xe gas ring:**
    - Mirror: Edmund #43-584 (or Thorlabs CM750-200-F01). Buy a spare.
    - SiPM: the 2" × 2" plane at the focal plane.
-   - Radiator: ~20 cm of Xe at 2 and 3 bar, no aerogel.
+   - Radiator: ~20 cm of Xe at 2 bar (reference) and 3 bar, no aerogel.
    - Trigger: the matched scintillator telescope from §5.
    - Expect about 230 ≥ 80 % rings per day through the telescope, of which about 180 carry ≥ 10 FT×QE photons at 2–3 bar (90 at 1 bar; §5).
 2. **Aerogel ring in air:** the 1 cm aerogel tile 1 mm in front of the SiPM, air at atmospheric pressure, and a short-focal-length mirror (Edmund #43-543, 2", f = 50.8 mm, or #43-553, 3", f = 76.2 mm). It measures the aerogel index, dispersion and clarity with air in the pores, the condition in which the vendor quotes n. With the spectrum, 47 (#43-543) and 23 (#43-553) ≥ 80 % rings (of the aerogel photons on the SiPM) and 149 / 104 arcs ≥ 50 % per hour. Xe in the gas changes this by < 2 %; Xe in the pores (configuration 3) lowers the ≥ 80 % rate by 1–6 % / 1–11 % at 1–3 bar. The tile side faces are black in the tracer; polished faces would add light, mostly off the ring.
@@ -259,7 +272,7 @@ Five configurations, in an order still to be decided (§8). Configurations 1 and
 - Porosity of the actual tile (0.935 from its density, 0.97 in the code's vacuum-referenced variant; §6.3) and the vendor data.
 - Order of the five configurations (§7).
 - Mechanical design of configurations 2–4: tile holder, gap, trigger.
-- Fold in the measured mirror reflectivity, SiPM PDE and aerogel transmission. Add photon statistics to the fast simulation (3D tracer).
+- Replace the assumed mirror reflectivity and the 25 °C PDE curve (options in §4) by measured values at the operating point; measure the aerogel transmission. Ring hits on the board exist as an option (§4); crosstalk and dark counts are not modelled.
 - Xe virial coefficient and UV dispersion: checked (§1.2).
 - Cosmic rates (Guan et al. parametrisation, sea level): altitude and geomagnetic cutoff (§5), the trigger counter geometry, the momentum handle and a data-level estimator of the aerogel angle for configurations 2–4, and the tile side faces (§7) are open.
 - Compare against the ARC full simulation (`ARC_Simulation_Reconstruction`), with Xe properties tuned.

@@ -39,8 +39,8 @@ def main():
     p.add_argument('--nphot', type=float, default=2e5, help='sampled photons per configuration (default 2e5)')
     p.add_argument('--seed', type=int, default=20261010, help='master seed')
     p.add_argument('--nproc', type=int, default=8, help='worker processes (default 8)')
-    args = p.parse_args(); out = cli.outdir(args)
-    _CFG.update(layout=Phase1Layout(Mirror(MIRROR_R, MIRROR_D), Sensor(SENSOR_HALF_2IN), xenon(3), Aerogel(AEROGEL_N_AIR)),
+    args = cli.pressure(p).parse_args(); out = cli.outdir(args)
+    _CFG.update(layout=Phase1Layout(Mirror(MIRROR_R, MIRROR_D), Sensor(SENSOR_HALF_2IN), xenon(args.pressure), Aerogel(AEROGEL_N_AIR)),
                 n=int(args.nphot))
     cfg = [(n_w, t) for n_w in INDICES for t in THICKNESS]
     seeds = np.random.SeedSequence(args.seed).spawn(len(cfg))

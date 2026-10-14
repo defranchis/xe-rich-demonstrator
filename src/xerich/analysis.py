@@ -1,7 +1,7 @@
 """Containment fractions, Monte Carlo rates, resolution terms and binning helpers."""
 import numpy as np
 
-from .constants import COSMIC_I0
+from .constants import COSMIC_I0, PAD_KMAX
 from .tracer import REASONS
 
 SCATTER_LAM_EDGES = np.arange(260.0, 961.0, 10.0)   # wavelength bins of the scattered-fraction histograms [nm]
@@ -53,3 +53,23 @@ def scattered_fraction(lam_end, oi):
         tot = tot-le[REASONS.index('mirror aperture'), 0]
     with np.errstate(invalid='ignore', divide='ignore'):
         return le[:, 1].sum(0)/tot
+
+
+def pad_hits(group, pad, mu, ngroups, kmax=PAD_KMAX):
+    """Binary pad hits per group (e.g. muon) from photons with expected counts mu landing on pads (index pad >= 0).
+
+    A pad fires if at least one photon reaches it: Poisson photon counts give P(fire) = 1 - exp(-mu_pad), mu_pad the sum of
+    mu on that pad, independently per pad. Returns the mean number of fired pads per group (sum of 1 - exp(-mu_pad)) and
+    P(N >= k), k = 0..kmax, of the number N of fired pads (Poisson-binomial distribution), shape (ngroups, kmax + 1).
+    """
+    npad = int(pad.max())+1 if len(pad) else 1
+    u, inv = np.unique(np.asarray(group, np.int64)*npad+pad, return_inverse=True)
+    q = 1-np.exp(-np.bincount(inv, mu)); g = u//npad
+    mean = np.bincount(g, q, ngroups)
+    rank = np.arange(len(u))-np.searchsorted(g, g)          # u is sorted by group: rank of each pad within its group
+    P = np.zeros((ngroups, kmax+1)); P[:, 0] = 1            # P[:, k]: exactly k fired, the last column >= kmax
+    for j in range(int(rank.max())+1 if len(u) else 0):
+        m = rank == j; gg = g[m]; qq = q[m][:, None]; Pg = P[gg]
+        new = Pg*(1-qq); new[:, 1:] += Pg[:, :-1]*qq; new[:, -1] += Pg[:, -1]*qq[:, 0]
+        P[gg] = new
+    return mean, np.cumsum(P[:, ::-1], 1)[:, ::-1]

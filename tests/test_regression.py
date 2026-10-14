@@ -24,6 +24,12 @@ def test_raytrace_stdout_identical(tmp_path):
     assert old.stdout == new.stdout
 
 
+def test_provenance_key():
+    """regression.py imports no xerich on purpose: its copy of the provenance key must match."""
+    from xerich import provenance
+    assert regression.PROVENANCE_KEY == provenance.KEY
+
+
 @pytest.mark.skipif(os.environ.get('XERICH_FULL_REGRESSION') != '1', reason='set XERICH_FULL_REGRESSION=1')
 def test_full_gate(tmp_path):
     assert regression.run('legacy', tmp_path/'baseline', 16, 200) == 0

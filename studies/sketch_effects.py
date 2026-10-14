@@ -1,7 +1,7 @@
 """Sketches of the optical effects in configuration 5 (f = 203 mm mirror with the tile), from rays traced with xerich.
 
 Layout (xerich.layout.Phase1Layout with the xerich.constants values): spherical mirror, flat SiPM at the
-focal plane, gas gap, aerogel tile, Xe 3 bar unless stated; vertical beta = 1 muon on the mirror axis entering at the
+focal plane, gas gap, aerogel tile, Xe at the reference pressure (constants.P_REF) unless stated; vertical beta = 1 muon on the mirror axis entering at the
 sensor plane. Rays are followed branch by branch with the tracer's own geometry and Fresnel calls (follow();
 terminal points and weights are checked against tracer.trace in several scenes, and a mismatch raises), and the
 Monte Carlo profiles come from sim.onaxis_muon. Every number in a label comes from the layout objects, the xerich
@@ -27,10 +27,10 @@ import numpy as np  # noqa: E402
 from matplotlib.lines import Line2D  # noqa: E402
 from matplotlib.patches import Rectangle  # noqa: E402
 
-from xerich import cli, sim, tracer  # noqa: E402
+from xerich import cli, provenance, sim, tracer  # noqa: E402
 from xerich.analysis import SCATTER_LAM_EDGES, scattered_fraction  # noqa: E402
 from xerich.cherenkov import PhotonSpectrum, qe_arc, qe_band, theta_xe  # noqa: E402
-from xerich.constants import (AEROGEL_N_AIR, HC, MIP_DIRECT_PE, MIRROR_D, MIRROR_R, SENSOR_HALF_2IN, T0,  # noqa: E402
+from xerich.constants import (AEROGEL_N_AIR, HC, MIP_DIRECT_PE, MIRROR_D, MIRROR_R, P_REF, SENSOR_HALF_2IN, T0,  # noqa: E402
                               T_ROOM, WINDOW_N, WINDOW_T)
 from xerich.layout import Aerogel, Mirror, Phase1Layout, Sensor, Window  # noqa: E402
 from xerich.media import ConstantIndex, Rayleigh, c4f10, xenon  # noqa: E402
@@ -44,6 +44,8 @@ LAM0 = 400.0                       # wavelength of the drawn rays [nm]
 DOWN = np.array([0.0, 0.0, -1.0])
 EX = np.array([1.0, 0.0, 0.0])
 GASES = {'xe2': xenon(2), 'xe3': xenon(3), 'c4f10': c4f10()}
+REF_GAS = 'xe%g' % P_REF             # gas of the sketches: Xe at the reference pressure
+ALT_GAS = 'xe3' if REF_GAS != 'xe3' else 'xe2'   # the other Xe pressure shown for comparison
 R_BIN = 0.01                       # radial bin of the Monte Carlo profiles [mm]
 R_MAX = float(np.ceil(SENSOR_HALF_2IN*np.sqrt(2)))   # radial range of the profiles: sensor half-diagonal, no overflow bin [mm]
 R_REBIN = 5                        # profile bins merged in figs 3 and 4 (R_BIN x R_REBIN wide)
@@ -339,6 +341,7 @@ def mc_chunk(task):
     ring = np.array([[wd[k, g].sum(), (wd[k, g]*r[g]).sum(), (wd[k, g]*r[g]**2).sum()] for k in range(2)])
     emit_w = np.array([[ws[k, org == oo].sum() for oo in (0, 1)] for k in range(2)])
     nl = len(SCATTER_LAM_EDGES)-1; il = np.clip(np.searchsorted(SCATTER_LAM_EDGES, ph['lam'][e['i']])-1, 0, nl-1)
+    assert e['reason'].max(initial=0) < len(tracer.REASONS)               # no 'mirror absorption' (reflectivity 1)
     lkey = (((org[e['i']].astype(int)*len(tracer.REASONS)+e['reason'])*2+(e['nsc'] > 0))*nl+il)
     lam = np.stack([np.bincount(lkey, ws[k][e['i']]*e['w'], minlength=2*len(tracer.REASONS)*2*nl).reshape(2, len(tracer.REASONS), 2, nl)
                     for k in range(2)])
@@ -427,7 +430,7 @@ def fig_overview(out, ctx):
     # dimension and labels
     ax.annotate('', xy=(-59, 0), xytext=(-59, zs), arrowprops=dict(arrowstyle='<->', color=MUTED, lw=0.9))
     ax.text(-60.5, 100, 'f = R/2 = %.1f mm' % f, rotation=90, ha='right', va='center', color=MUTED, fontsize=9)
-    r_mc = ctx['mc']['xe3']['r_ftqe'][0]
+    r_mc = ctx['mc'][REF_GAS]['r_ftqe'][0]
     ax.annotate('', xy=(0, zs+6.5), xytext=(r_mc, zs+6.5), arrowprops=dict(arrowstyle='<->', color=GAS, lw=0.9))
     note(ax, -1, zs+6.5, 'ring r = %.2f mm ' % r_mc, color=GAS, ha='right', fs=8.5)
     note(ax, 27, zs+3.8, 'SiPM %.1f mm (z = f)' % (2*lay.sensor.half), fs=8.5)
@@ -485,7 +488,7 @@ def fig_overview(out, ctx):
     dx.add_patch(plt.Circle((0, 0), rg[1], fc=GHOST, alpha=0.13, ec='none'))
     dx.add_patch(plt.Circle((0, 0), rg[0], fc='#f8fafc', ec=GHOST, lw=0.6, ls=':'))
     ra = ctx['aero_r']
-    mcx = ctx['mc']['xe3']; ghost_frac = mcx['cls_ftqe'][0, 1:3].sum()/mcx['emit'][0, 0]    # both faces, FT x QE
+    mcx = ctx['mc'][REF_GAS]; ghost_frac = mcx['cls_ftqe'][0, 1:3].sum()/mcx['emit'][0, 0]    # both faces, FT x QE
     th2 = np.r_[t, t[::-1]]; rr = np.r_[np.full_like(t, ra[0]), np.full_like(t, ra[1])]
     dx.fill(rr*np.cos(th2), rr*np.sin(th2), color=AEROGEL, alpha=0.45, lw=0)
     dx.plot(r_mc*np.cos(t), r_mc*np.sin(t), color=GAS, lw=1.6)
@@ -507,8 +510,8 @@ def fig_overview(out, ctx):
     say('[fig1] gas rays %.0f nm land at x = %.4f-%.4f mm (%d heights); MC <r> FTxQE %.3f mm' % (LAM0, spread.min(), spread.max(), len(zg), r_mc))
     say('[fig1] aerogel photons hit the sphere at rho = %.2f-%.2f mm; angle in the gas %.1f mrad; insets x%.0f, x%.0f'
         % (rho_a.min(), rho_a.max(), 1e3*th_gas_a.mean(), mb, mc_))
-    say('[fig1] gas ghosts (bottom + top tile face) %.3e of the emitted gas light, bottom %.3e top %.3e (FTxQE, Xe 3 bar)'
-        % (ghost_frac, *(mcx['cls_ftqe'][0, 1:3]/mcx['emit'][0, 0])))
+    say('[fig1] gas ghosts (bottom + top tile face) %.3e of the emitted gas light, bottom %.3e top %.3e (FTxQE, %s)'
+        % (ghost_frac, *(mcx['cls_ftqe'][0, 1:3]/mcx['emit'][0, 0]), lay.gas.label))
     return p
 
 
@@ -721,17 +724,17 @@ def fig_aerogel_reflection(out, ctx):
     # (b) MC radial profile of the reflected aerogel light
     bx = fig.add_axes([0.53, 0.09, 0.44, 0.83])
     rc = (np.arange(int(round(R_MAX/R_BIN)))+0.5)*R_BIN
-    for name, wn, ls in (('xe3', 'ftqe', '-'), ('xe3', 'ft', '--'), ('xe2', 'ftqe', '-.')):
+    for name, wn, ls in ((REF_GAS, 'ftqe', '-'), (REF_GAS, 'ft', '--'), (ALT_GAS, 'ftqe', '-.')):
         s = ctx['mc'][name]; k = 0 if wn == 'ftqe' else 1; lab = '%s, %s' % (gas_label(s['layout'].gas), 'FT×QE' if wn == 'ftqe' else 'FT')
         y = rebin(s['radial'][k, 1, 1], R_REBIN); tot = s['cls_'+wn][1, 1]
-        bx.step(rebin(rc, R_REBIN), y, where='mid', color=AEROGEL if name == 'xe3' else '#92400e', ls=ls, lw=1.4,
+        bx.step(rebin(rc, R_REBIN), y, where='mid', color=AEROGEL if name == REF_GAS else '#92400e', ls=ls, lw=1.4,
                 label='%s: %s photons per muon' % (lab, sci(tot, 3)))
     for r_ in ctx['aero_r']:
         bx.axvline(r_, color=MUTED, lw=0.7, ls=':')
     bx.set_xlim(0, 9); bx.set_ylim(0, bx.get_ylim()[1]*1.3)
     bx.set_xlabel('radius r on the SiPM [mm]'); bx.set_ylabel('dN/dr [photons / mm / muon]')
     bx.legend(loc='upper right', fontsize=8.5)
-    tot = ctx['mc']['xe3']['cls_ftqe'][1, 1]; em = ctx['mc']['xe3']['emit'][0, 1]
+    tot = ctx['mc'][REF_GAS]['cls_ftqe'][1, 1]; em = ctx['mc'][REF_GAS]['emit'][0, 1]
     bx.text(0.02, 0.55, 'The only aerogel light\non the SiPM: %s of\nthe emitted aerogel light\n(FT×QE).\n\nFlat in r: the landing\nradius is linear in the\nemission depth, which\nis uniform.'
             % sci(tot/em, 2), transform=bx.transAxes, va='center', fontsize=8.5, color=INK)
     bx.set_title('(b) Monte Carlo radial profile (%.2f mm bins),\nwithout Rayleigh scattering (see sketch 9)' % (R_BIN*R_REBIN), loc='left'); bx.grid(alpha=.3)
@@ -739,7 +742,7 @@ def fig_aerogel_reflection(out, ctx):
     say('[fig3] aerogel %.0f nm: incidence %.3f deg, Rp %.4e, unpolarised R %.4e, ratio %.4f; top-face T %.6f; landing r %s mm'
         % (LAM0, np.degrees(evb['inc']), evb['R'], evu['R'], evb['R']/evu['R'], evt['T'], ', '.join('%.3f' % e for e in ends)))
     say('[fig3] MC %s aerogel bottom reflection: %.4e (FTxQE) %.4e (FT) photons/muon; fraction of emitted %.3e'
-        % (lay.gas.label, ctx['mc']['xe3']['cls_ftqe'][1, 1], ctx['mc']['xe3']['cls_ft'][1, 1], tot/em))
+        % (lay.gas.label, ctx['mc'][REF_GAS]['cls_ftqe'][1, 1], ctx['mc'][REF_GAS]['cls_ft'][1, 1], tot/em))
     return p
 
 
@@ -854,7 +857,7 @@ def fig_ghosts(out, ctx):
     kx.set_title('zoom: z > %.0f mm' % ZOOM_Z0, fontsize=7.5, loc='left')
     # (c) MC radial profile of the ghosts
     cx = fig.add_axes([0.745, 0.08, 0.235, 0.84])
-    s3 = ctx['mc']['xe3']; rc = (np.arange(s3['radial'].shape[-1])+0.5)*R_BIN
+    s3 = ctx['mc'][REF_GAS]; rc = (np.arange(s3['radial'].shape[-1])+0.5)*R_BIN
     for ci, ls, lab in ((1, (0, (5, 3)), 'bottom-face reflections'), (2, (0, (6, 2, 1, 2)), 'top-face reflections')):
         cx.step(rebin(rc, R_REBIN), rebin(s3['radial'][0, 0, ci], R_REBIN)*1e4, where='mid', color=GHOST, ls=ls, lw=1.3,
                 label='%s: %s per muon' % (lab, sci(s3['cls_ftqe'][0, ci], 3)))
@@ -920,7 +923,7 @@ def fig_chromatic(out, ctx):
     lam = np.linspace(260, 960, 500)
     lo, hi = qe_band()
     bx = fig.add_axes([0.35, 0.56, 0.28, 0.37])
-    for key, ls in (('xe3', '-'), ('xe2', '--'), ('c4f10', '-.')):
+    for key, ls in ((REF_GAS, '-'), (ALT_GAS, '--'), ('c4f10', '-.')):
         g = GASES[key]
         bx.plot(lam, f*np.tan(th_c(g.n(lam))), color=RADIATOR[key], ls=ls, lw=1.5, label=gas_label(g))
     for wl, c in WL_COL.items():
@@ -933,7 +936,7 @@ def fig_chromatic(out, ctx):
             fontsize=7.5, color=MUTED, ha='right')
     # (c) spectra
     cx = fig.add_axes([0.35, 0.08, 0.28, 0.37])
-    for key, ls in (('xe3', '-'), ('c4f10', '-.')):
+    for key, ls in ((REF_GAS, '-'), ('c4f10', '-.')):
         g = GASES[key]; name = gas_label(g)
         sp = PhotonSpectrum(g.index, lo, hi); l_ = HC/sp.E
         dl = sp.pdf*sp.E**2/HC/10                                   # photons per nm per mm
@@ -949,7 +952,7 @@ def fig_chromatic(out, ctx):
     # (d) ring profiles
     dx = fig.add_axes([0.70, 0.08, 0.28, 0.85])
     rc = (np.arange(int(round(R_MAX/R_BIN)))+0.5)*R_BIN
-    for key, wn, lw, al in (('xe3', 'ftqe', 1.6, 1), ('xe3', 'ft', 1.0, 0.55), ('xe2', 'ftqe', 1.4, 1), ('c4f10', 'ftqe', 1.6, 1)):
+    for key, wn, lw, al in ((REF_GAS, 'ftqe', 1.6, 1), (REF_GAS, 'ft', 1.0, 0.55), (ALT_GAS, 'ftqe', 1.4, 1), ('c4f10', 'ftqe', 1.6, 1)):
         s = ctx['mc'][key]; k = 0 if wn == 'ftqe' else 1; lab = '%s, %s' % (gas_label(s['layout'].gas), 'FT×QE' if wn == 'ftqe' else 'FT')
         y = s['radial'][k, 0, 0]
         m, r_ = s['r_'+wn]
@@ -965,7 +968,7 @@ def fig_chromatic(out, ctx):
     dx.set_title('(d) Monte Carlo ring profiles,\nwithout Rayleigh scattering (see sketch 9)', loc='left')
     p = save(out, 'sketch_effects_5_chromatic.png', dpi=150, fig=fig); plt.close(fig)
     say('[fig5] traced landing x (%s, mean of z_e = %s): ' % (lay.gas.label, '/'.join('%.0f' % z for z in zes)) + ', '.join('%d nm %.3f mm (spread %.4f)' % (wl, v.mean(), np.ptp(v)) for wl, v in land.items()) + '; stretch x%.1f' % sr)
-    for key in ('xe3', 'xe2', 'c4f10'):
+    for key in (REF_GAS, ALT_GAS, 'c4f10'):
         s = ctx['mc'][key]
         say('[fig5] %s ring: FTxQE <r> %.4f rms %.4f mm (%.3f mrad); FT <r> %.4f rms %.4f mm' % (key, *s['r_ftqe'], 1e3*s['r_ftqe'][1]/f, *s['r_ft']))
     return p
@@ -1048,7 +1051,7 @@ def fig_aberration(out, ctx):
     cx.legend(loc='upper right', fontsize=8); cx.grid(alpha=.3)
     cx.set_title('(c) reconstructed Cherenkov angle (mirror unbounded)', loc='left')
     # (d) numbers
-    legacy = {}; th_rt = theta_xe(3.0)
+    legacy = {}; th_rt = theta_xe(P_REF)
     for h0 in ABERR_LEGACY_OFFSETS:
         t_, _ = sim.aberration(h0, 0.0, np.random.default_rng(1), Mirror(MIRROR_R), TRACK_LEN, th_rt, n=N_ABERR)   # same seed value and angle as raytrace.py, for comparison
         legacy[h0] = t_.std()
@@ -1178,7 +1181,7 @@ def fig_tir(out, ctx):
     cx.plot(tt, ftr, 's', color='#92400e', ms=5, mfc='white', label='tracer, %.0f mm tile: TIR' % (2*lay.tile.half))
     cx.plot(tt, fside, '^', color=MUTED, ms=5, mfc='white', label='tracer, %.0f mm tile: ends on a side face, no TIR' % (2*lay.tile.half))
     cx.plot(tg, np.cos(np.radians(tg))**2, color=MUTED, lw=1.0, ls='--', label='cos²θμ (relative muon intensity)')
-    th_acc = np.degrees(np.arctan((lay.sensor.half-ctx['mc']['xe3']['r_ftqe'][0])/lay.mirror.f))
+    th_acc = np.degrees(np.arctan((lay.sensor.half-ctx['mc'][REF_GAS]['r_ftqe'][0])/lay.mirror.f))
     cx.axvspan(0, th_acc, color=GAS, alpha=0.18, lw=0)
     cx.axvline(np.degrees(thmu_min), color=INK, lw=0.9, ls=':')
     cx.text(np.degrees(thmu_min)-1, 0.55, 'TIR starts at\nθμ = θcrit − θ_aerogel\n= %.1f°' % np.degrees(thmu_min), ha='right', fontsize=8.5, color=INK)
@@ -1368,7 +1371,7 @@ def pick_halo_paths(lay, ph, e):
 
 
 def fig_rayleigh(out, ctx):
-    lay = ctx['mc']['xe3_ray']['layout']; zt0, zt1, zs = lay.z_tile_bottom, lay.z_tile_top, lay.z_sensor
+    lay = ctx['mc'][REF_GAS+'_ray']['layout']; zt0, zt1, zs = lay.z_tile_bottom, lay.z_tile_top, lay.z_sensor
     ray_ = lay.tile_scatter; t = lay.tile.thickness; tha = ctx['tha']
     lo, hi = qe_band()
     rng = np.random.default_rng(ctx['seed']+SEED['rayleigh'])
@@ -1412,7 +1415,7 @@ def fig_rayleigh(out, ctx):
     ax.set_xlabel('x [mm]'); ax.set_ylabel('z [mm]')
     ax.set_title('(a) recorded photon paths, projected on the x-z plane, to scale\n(%s, %d sampled photons per origin)' % (lay.gas.label, N_REC), loc='left')
     # (b) radial profile
-    s0 = ctx['mc']['xe3']; s1 = ctx['mc']['xe3_ray']; isc = tracer.CLASSES.index('scattered')
+    s0 = ctx['mc'][REF_GAS]; s1 = ctx['mc'][REF_GAS+'_ray']; isc = tracer.CLASSES.index('scattered')
     rc = (np.arange(s1['radial'].shape[-1])+0.5)*R_BIN
     bx = fig.add_axes([0.43, 0.50, 0.55, 0.42])
     rad = s1['radial'][0]                                              # FT x QE: (origin, class, r)
@@ -1648,11 +1651,12 @@ def main():
     p.add_argument('--seed', type=int, default=20261010, help='master seed; each sample adds its offset from SEED (default 20261010)')
     p.add_argument('--only', type=int, nargs='*', default=None, help='figure numbers to draw (default all)')
     args = p.parse_args(); out = cli.outdir(args)
-    ctx = {'lay': layout(GASES['xe3']), 'seed': args.seed}
+    ctx = {'lay': layout(GASES[REF_GAS]), 'seed': args.seed}
     say('sketch_effects: f = %.0f mm layout, %s unless stated, %d worker processes' % (ctx['lay'].mirror.f, ctx['lay'].gas.label, args.nproc))
     nchunk = int(np.ceil(args.nphot/args.chunk))
     t0 = time.time()
-    ctx['mc'] = run_mc(tuple((k, g, None) for k, g in GASES.items()) + (('xe3_ray', GASES['xe3'], Rayleigh()),),
+    rays = ((REF_GAS+'_ray', GASES[REF_GAS], Rayleigh()),)
+    ctx['mc'] = run_mc(tuple((k, g, None) for k, g in GASES.items())+rays,
                        args.chunk, nchunk, args.nproc, args.seed)
     for k, s in ctx['mc'].items():
         say('[mc] %-6s %d x %d photons per origin: ring <r> FTxQE %.4f rms %.4f | FT %.4f rms %.4f mm; emitted FTxQE gas %.3f aerogel %.3f'
@@ -1665,7 +1669,7 @@ def main():
     for k in sorted(FIGS):
         if args.only is None or k in args.only:
             say('wrote', FIGS[k](out, ctx))
-    (out/'sketch_effects_numbers.txt').write_text('\n'.join(LINES)+'\n')
+    (out/'sketch_effects_numbers.txt').write_text(provenance.text_line()+'\n'+'\n'.join(LINES)+'\n')
 
 
 if __name__ == '__main__':

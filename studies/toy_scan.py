@@ -6,23 +6,23 @@ from xerich.constants import MIRROR_R, MUON_THMAX, SENSOR_HALF_PROTO
 from xerich.layout import Aerogel, Mirror, Radiator, Sensor
 from xerich.media import aerogel_index
 from xerich.muons import flux_through_square, redraw_xy, sample_cos3
-from xerich.sim import MirrorToy
+from xerich.sim import MirrorToy, gas_yield
 
-P_BAR = 3
 LAM = 400                    # wavelength for the indices [nm]
 N_MU = 12000
 
 
 def main():
-    model = cli.xe_index(cli.parser(__doc__)).parse_args().xe_index
+    args = cli.gas_yield(cli.pressure(cli.porosity(cli.xe_index(cli.parser(__doc__))))).parse_args(); model = args.xe_index
     rng = np.random.default_rng(7)
-    ng = Radiator(P_BAR, model=model).n(LAM); aero = Aerogel(n=aerogel_index(ng))
+    gy = args.gas_yield if args.gas_yield is not None else gas_yield(args.pressure, model)
+    ng = Radiator(args.pressure, model=model).n(LAM); aero = Aerogel(n=aerogel_index(ng, porosity=args.porosity))
     rate = flux_through_square(2*aero.half*1e-3, MUON_THMAX)*3600
     print('muons through 5x5 cm tile: %.0f /h' % rate)
     print('sensor     mirror   | aerogel: <arc> | arc>=50%%/h  arc>=90%%/h  >=8 emitted/h  >=15 emitted/h | gas >=80%% cone /h')
     for sh, lab in ((SENSOR_HALF_PROTO, '5.1 cm'), (40, '8 cm'), (51.2, '10.2 cm'), (64, '12.8 cm')):
         for D in (76.2, 152.4, 200.0):
-            sensor = Sensor(sh); toy = MirrorToy(Mirror(MIRROR_R, D), sensor, aero, ng)
+            sensor = Sensor(sh); toy = MirrorToy(Mirror(MIRROR_R, D), sensor, aero, ng, gas_yield=gy)
 
             def sampler(n):
                 u, p0, th = sample_cos3(rng, n, sensor.half, toy.f, MUON_THMAX)
